@@ -1,0 +1,41 @@
+-- Primer Año - Seed Data for Testing
+-- File: supabase/seed.sql
+-- Description: Minimal seed data structure (DO NOT include real credentials)
+
+-- ============================================
+-- IMPORTANT: MANUAL SETUP REQUIRED
+-- ============================================
+-- This file does NOT contain actual user data or credentials.
+-- Family and user setup must be performed manually in Supabase Dashboard:
+--
+-- 1. Create a new family record in the `families` table
+-- 2. Create two test users via Supabase Authentication
+-- 3. Create profile records for each user in `profiles`
+-- 4. Add family_members entries linking users to the family
+-- 5. Create a third external user for isolation testing
+--
+-- DO NOT commit real email addresses, passwords, or personal data.
+
+-- Example structure (replace UUIDs with actual values after manual setup):
+-- 
+-- INSERT INTO families (id, name, child_name, child_birth_date, monthly_budget)
+-- VALUES ('<generated-uuid>', 'Familia Prueba', 'Bebé Prueba', '2024-01-15', 400000);
+--
+-- After creating users via Auth, their profiles are created automatically via trigger
+-- (you need to set up a trigger or create profiles manually):
+--
+-- INSERT INTO profiles (id, display_name)
+-- VALUES ('<user-a-uuid-from-auth>', 'Javier'),
+--        ('<user-b-uuid-from-auth>', 'Josefina');
+--
+-- INSERT INTO family_members (family_id, user_id, role)
+-- VALUES ('<family-uuid>', '<user-a-uuid>', 'owner'),
+--        ('<family-uuid>', '<user-b-uuid>', 'member');
+
+-- For testing purposes, use placeholder data only:
+-- Family name: "Familia Test"
+-- Child name: "Bebé Test"
+-- Display names: "Usuario A", "Usuario B", "Usuario Externo"
+
+-- No actual INSERT statements are included here to prevent accidental data commits.
+-- Refer to README.md for manual setup instructions.
