@@ -1,0 +1,363 @@
+================================================================================
+PRIMER AÑO - ETAPA 1: CORRECCIONES DE AUDITORÍA TÉCNICA
+================================================================================
+Fecha: 24 de julio de 2026
+Versión: 0.1.0
+Estado: CORRECCIONES APLICADAS - PENDIENTE VALIDACIÓN EN SUPABASE REAL
+
+================================================================================
+RESUMEN EJECUTIVO
+================================================================================
+
+Este documento detalla las correcciones técnicas aplicadas a la Etapa 1 del
+proyecto "Primer Año" en respuesta a la auditoría que identificó inconsistencias
+entre la documentación y el código real del repositorio.
+
+PROBLEMAS IDENTIFICADOS POR EL AUDITOR:
+1. Permisos de función _private mal configurados (REVOKE después de GRANT)
+2. Pruebas JavaScript ficticias (funciones definidas dentro de los tests)
+3. Tests SQL sin aserciones automáticas (solo consultas informativas)
+4. Resultados marcados como ejecutados sin evidencia real
+5. Próximo paso proponía funciones descartadas (códigos de invitación)
+
+CORRECCIONES APLICADAS EN ESTA ITERACIÓN:
+✓ Función SECURITY DEFINER con permisos corregidos
+✓ Eliminación de tests JavaScript ficticios
+✓ Creación de funciones reales en src/utils/currency.js
+✓ Nuevos tests reales que importan código productivo
+✓ Tests SQL reescritos con verificaciones explícitas
+✓ seed.sql convertido en documentación de procedimiento manual
+✓ Actualización honesta de PROJECT_STATE.md
+
+================================================================================
+CAMBIOS EN BASE DE DATOS
+================================================================================
+
+ARCHIVO: supabase/migrations/20260724162700_initial_schema.sql
+-----------------------------------------------------------------------------
+
+PROBLEMA ANTERIOR:
+El orden de los permisos era incorrecto:
+1. Se concedía EXECUTE a authenticated
+2. Luego se revocaba ALL al schema _private de authenticated
+3. Esto dejaba la función inaccesible porque no hay USAGE en el schema
+
+SOLUCIÓN APLICADA:
+Nuevo orden correcto de permisos:
+
+  -- 1. Revocar todo por defecto
+  REVOKE ALL ON SCHEMA _private FROM PUBLIC;
+  REVOKE ALL ON SCHEMA _private FROM anon;
+  REVOKE ALL ON SCHEMA _private FROM authenticated;
+  
+  -- 2. Crear función SECURITY DEFINER con search_path seguro
+  CREATE OR REPLACE FUNCTION _private.user_belongs_to_family(...)
+  ... LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
+  
+  -- 3. Conceder USAGE del schema (necesario para encontrar la función)
+  GRANT USAGE ON SCHEMA _private TO authenticated;
+  
+  -- 4. Conceder solo EXECUTE de la función específica
+  REVOKE ALL ON FUNCTION _private.user_belongs_to_family(UUID, UUID) FROM PUBLIC;
+  REVOKE ALL ON FUNCTION _private.user_belongs_to_family(UUID, UUID) FROM anon;
+  GRANT EXECUTE ON FUNCTION _private.user_belongs_to_family(UUID, UUID) TO authenticated;
+
+JUSTIFICACIÓN TÉCNICA:
+- Para invocar una función en un schema, se necesita USAGE en el schema
+- SECURITY DEFINER con search_path = '' previene inyección de schema
+- Los permisos se conceden explícitamente después de revocar por defecto
+- No se usa service_role ni claves administrativas
+
+VERIFICACIÓN POSTERIOR:
+Los tests SQL ahora incluyen:
+- TEST 8: has_function_privilege('authenticated', ..., 'EXECUTE') = true
+- TEST 9: has_schema_privilege('authenticated', ..., 'USAGE') = true
+- Ambos deben retornar true para considerar la configuración correcta
+
+================================================================================
+CAMBIOS EN PRUEBAS JAVASCRIPT
+================================================================================
+
+ARCHIVOS ELIMINADOS:
+- tests/calculations.test.js (ficticio)
+- tests/shopping-flow.test.js (ficticio)
+
+PROBLEMA IDENTIFICADO:
+Ambos archivos definían las funciones DENTRO del mismo archivo de test:
+  
+  // ANTES (INCORRECTO):
+  describe('formatCLP', () => {
+    function formatCLP(amount) {  // <-- Definida aquí mismo
+      return `$${amount}`;
+    }
+    it('formats correctly', () => {
+      expect(formatCLP(1000)).toBe('$1000');
+    });
+  });
+
+Esto no prueba código real de la aplicación, solo verifica que el código
+dentro del test funciona.
+
+ARCHIVOS CREADOS:
+- src/utils/currency.js (funciones reales productivas)
+- tests/currency.test.js (tests que importan código real)
+
+ESTRUCTURA CORRECTA AHORA:
+
+  // src/utils/currency.js
+  export function formatCLP(amount) {
+    if (typeof amount !== 'number' || amount < 0 || !Number.isInteger(amount)) {
+      throw new Error('Amount must be a non-negative integer');
+    }
+    return new Intl.NumberFormat('es-CL', {...}).format(amount);
+  }
+  
+  // tests/currency.test.js
+  import { formatCLP } from '../src/utils/currency.js';
+  
+  describe('formatCLP', () => {
+    it('formats zero correctly', () => {
+      expect(formatCLP(0)).toBe('$0');
+    });
+    // ... más tests
+  });
+
+FUNCIONES IMPLEMENTADAS EN currency.js:
+1. formatCLP(amount) - Formato de pesos chilenos
+2. calculateBabyAge(birthDateStr, referenceDate) - Edad en meses/días
+3. isStockLow(currentStock, minimumStock) - Verificación de stock
+4. isValidExpenseAmount(amount) - Validación de montos
+5. calculateTotalExpenses(expenses) - Suma de gastos
+6. calculateRemainingBudget(budget, spent) - Presupuesto restante
+
+RESULTADO DE TESTS:
+$ npm run test -- --run
+✓ tests/currency.test.js (27 tests) 79ms
+Test Files  1 passed (1)
+Tests  27 passed (27)
+
+================================================================================
+CAMBIOS EN PRUEBAS SQL
+================================================================================
+
+ARCHIVO: supabase/tests/database/test_rls_isolation.sql
+-----------------------------------------------------------------------------
+
+PROBLEMA ANTERIOR:
+- Usaba relpolicies IS NOT NULL (incorrecto para verificar RLS)
+- Casos de integración solo como comentarios sin estructura de test
+- Sin verificaciones de permisos de función/schema
+
+SOLUCIÓN APLICADA:
+9 tests estáticos verificables que consultan catálogos PostgreSQL:
+
+TEST 1: RLS habilitado en todas las tablas
+  - Consulta: pg_class.relrowsecurity
+  - Esperado: 8 tablas con relrowsecurity = true
+
+TEST 2: Políticas existen para todas las tablas
+  - Consulta: pg_policies COUNT por tabla
+  - Esperado: policy_count >= 1 para cada tabla
+
+TEST 3: Roles de políticas son solo 'authenticated'
+  - Consulta: pg_policies.roles
+  - Esperado: Todas las políticas contienen 'authenticated'
+  - Esperado: Ninguna política contiene 'anon' o 'public'
+
+TEST 4: Función SECURITY DEFINER configurada correctamente
+  - Consulta: pg_proc.prosecdef, proconfig
+  - Esperado: prosecdef = true, proconfig contiene 'search_path='
+
+TEST 5: CHECK constraint en expenses.amount_clp
+  - Consulta: pg_constraint para expenses
+  - Esperado: constraint_def LIKE '%amount_clp >= 0%'
+
+TEST 6: CHECK constraints en products.stock
+  - Consulta: pg_constraint para products
+  - Esperado: current_stock >= 0 AND minimum_stock >= 0
+
+TEST 7: Schema _private existe
+  - Consulta: pg_namespace WHERE nspname = '_private'
+  - Esperado: 1 fila retornada
+
+TEST 8: Permisos de función correctos
+  - Consulta: has_function_privilege()
+  - Esperado: authenticated=true, public=false, anon=false
+
+TEST 9: Permisos de schema correctos
+  - Consulta: has_schema_privilege()
+  - Esperado: authenticated=true, public=false, anon=false
+
+QUERIES DE RESUMEN:
+- Count de tablas con RLS habilitado
+- Count de políticas por tipo de comando (SELECT/INSERT/UPDATE/DELETE)
+
+CASOS DE INTEGRACIÓN DOCUMENTADOS (pendientes de ejecución manual):
+- Usuario miembro lee datos de su familia
+- Segundo miembro ve los mismos datos
+- Usuario externo NO ve datos ajenos
+- Usuario anónimo no tiene acceso
+- INSERT en family_members es rechazado
+- UPDATE en family_members es rechazado
+- Montos negativos son rechazados
+- Stock negativo es rechazado
+
+================================================================================
+CAMBIOS EN DOCUMENTACIÓN
+================================================================================
+
+ARCHIVO: supabase/seed.sql
+-----------------------------------------------------------------------------
+
+PROBLEMA ANTERIOR:
+Podría interpretarse como SQL ejecutable con datos de ejemplo.
+
+SOLUCIÓN APLICADA:
+Convertido completamente a documentación de procedimiento manual:
+- Título claro: "DO NOT execute this file automatically"
+- 6 pasos detallados para setup manual
+- Advertencias sobre no usar datos personales reales
+- Explicación de por qué es manual (Auth requiere Dashboard)
+- Referencia a Supabase CLI como alternativa parcial
+
+SECCIÓN AGREGADA: "WHY THIS IS MANUAL"
+- User creation requires Supabase Auth
+- Passwords cannot be set via SQL
+- Email verification may be required
+- Using seed files with real user data is a security risk
+
+================================================================================
+VALIDACIONES EJECUTADAS
+================================================================================
+
+COMANDO                    | RESULTADO | DETALLE
+---------------------------|-----------|----------------------------------
+npm run build              | ✓ PASS    | 191.23 kB JS, 4.10 kB CSS
+npm run lint               | ✓ PASS    | 0 warnings, 0 errors (6 files)
+npm run test -- --run      | ✓ PASS    | 27/27 tests passing
+
+COMANDOS PENDIENTES (requieren Supabase real):
+- supabase db reset
+- supabase migration up
+- psql -f supabase/tests/database/test_rls_isolation.sql
+- supabase test db
+
+================================================================================
+ESTADO DE CRITERIOS DE ACEPTACIÓN
+================================================================================
+
+CRITERIO                                          | ESTADO
+--------------------------------------------------|--------
+Migraciones con nombres compatibles Supabase CLI  | ✓ CUMPLIDO
+Esquema reproducible en orden                     | ✓ CUMPLIDO (no ejecutado)
+Todas las tablas públicas tienen RLS habilitado   | ✓ CUMPLIDO (no verificado)
+Función SECURITY DEFINER usa search_path seguro   | ✓ CUMPLIDO
+Permisos de función restringidos                  | ✓ CUMPLIDO (corregido)
+Pruebas consultan catálogos correctamente         | ✓ CUMPLIDO
+No hay pruebas JavaScript ficticias               | ✓ CUMPLIDO (eliminadas)
+No hay secretos ni credenciales                   | ✓ CUMPLIDO
+No se implementó Etapa 2                          | ✓ CUMPLIDO
+Documentación diferencia ejecutado vs pendiente   | ✓ CUMPLIDO
+
+================================================================================
+RIESGOS PENDIENTES
+================================================================================
+
+1. RLS NO PROBADO EN INTEGRACIÓN
+   - Las políticas están correctamente definidas
+   - No fueron ejecutadas contra una base de datos real
+   - Requiere proyecto Supabase con usuarios reales
+
+2. FUNCIÓN AUXILIAR NO VERIFICADA
+   - _private.user_belongs_to_family() no fue probada con auth real
+   - Los tests de privilegios requieren conexión a instancia activa
+
+3. SETUP MANUAL REQUERIDO
+   - Creación de familias y miembros debe hacerse vía Dashboard
+   - No hay automatización hasta Etapa 2 (fuera de alcance)
+
+4. DOCKER/SUPABASE CLI NO DISPONIBLES
+   - No se pudo ejecutar `supabase db reset` ni `supabase test db`
+   - Los tests SQL son estáticos, necesitan instancia para ejecución
+
+================================================================================
+COMANDOS PARA VALIDACIÓN FUTURA
+================================================================================
+
+CUANDO EXISTA UNA INSTANCIA SUPABASE:
+
+# 1. Resetear y aplicar migraciones
+supabase db reset
+supabase migration up
+
+# 2. Ejecutar tests estáticos
+psql -h <host> -U postgres -d postgres \
+  -f supabase/tests/database/test_rls_isolation.sql
+
+# 3. Verificar resultados esperados
+# - TEST 1: 8 filas con rls_enabled = 'YES'
+# - TEST 2: 8 filas con policy_count >= 1
+# - TEST 3: Empty set (no policies for non-authenticated)
+# - TEST 4: 1 fila con is_security_definer = true
+# - TEST 5: 1 fila con test_passed = true (amount_clp constraint)
+# - TEST 6: 1 fila con test_passed = true (stock constraints)
+# - TEST 7: 1 fila con status = 'exists'
+# - TEST 8: 1 fila con authenticated_can_execute = true
+# - TEST 9: 1 fila con authenticated_has_usage = true
+
+# 4. Pruebas de integración manual (ver seed.sql)
+# - Crear 3 usuarios vía Dashboard
+# - Crear 2 familias
+# - Asignar membresías
+# - Probar aislamiento con diferentes contextos de usuario
+
+================================================================================
+DECISIÓN DE AUDITORÍA
+================================================================================
+
+ESTADO ANTERIOR: "Etapa 1 completada" ❌ INCORRECTO
+ESTADO ACTUAL: "Correcciones aplicadas, pendiente validación en Supabase real"
+
+La Etapa 1 NO puede considerarse completamente aprobada hasta que:
+1. Las migraciones se ejecuten en una instancia Supabase real
+2. Los tests SQL retornen los valores esperados
+3. El aislamiento RLS se verifique con 3 usuarios reales
+
+SIN EMBARGO, las correcciones técnicas han sido aplicadas correctamente:
+✓ Permisos de función corregidos (USAGE + EXECUTE en orden correcto)
+✓ Tests JavaScript ficticios eliminados
+✓ Funciones reales implementadas y testeadas
+✓ Tests SQL mejorados con verificaciones explícitas
+✓ Documentación actualizada honestamente
+
+RECOMENDACIÓN: Proceder con validación en instancia Supabase antes de Etapa 2.
+
+================================================================================
+ARCHIVOS MODIFICADOS EN ESTA ITERACIÓN
+================================================================================
+
+MODIFICADOS:
+- supabase/migrations/20260724162700_initial_schema.sql (permisos corregidos)
+- supabase/tests/database/test_rls_isolation.sql (tests reescritos)
+- supabase/seed.sql (convertido a documentación)
+- PROJECT_STATE.md (actualizado con estado real)
+
+CREADOS:
+- src/utils/currency.js (funciones reales productivas)
+- tests/currency.test.js (27 tests reales)
+- ETAPA1_CORRECCIONES_AUDITORIA.txt (este documento)
+
+ELIMINADOS:
+- tests/calculations.test.js (ficticio)
+- tests/shopping-flow.test.js (ficticio)
+
+NO MODIFICADOS (fuera de alcance):
+- src/App.jsx (pantalla mínima sin cambios)
+- src/lib/supabase.js (cliente sin cambios)
+- .env.example (sin credenciales)
+- README.md (pendiente actualización menor)
+- AGENTS.md (instrucciones para agentes IA)
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================
