@@ -149,6 +149,11 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 -- Create a secure schema for helper functions
 CREATE SCHEMA IF NOT EXISTS _private;
 
+-- Revocar acceso por defecto al esquema privado
+REVOKE ALL ON SCHEMA _private FROM PUBLIC;
+REVOKE ALL ON SCHEMA _private FROM anon;
+REVOKE ALL ON SCHEMA _private FROM authenticated;
+
 -- Function to check if a user belongs to a family
 -- This function is security definer to avoid recursion in RLS policies
 -- SECURITY NOTE: Uses SET search_path = '' to prevent schema injection attacks
@@ -162,14 +167,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
--- Grant execute permission only to authenticated users
+-- Conceder solo USAGE del esquema (necesario para encontrar la función)
+GRANT USAGE ON SCHEMA _private TO authenticated;
+
+-- Conceder solo EXECUTE de la función específica
+REVOKE ALL ON FUNCTION _private.user_belongs_to_family(UUID, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION _private.user_belongs_to_family(UUID, UUID) FROM anon;
 GRANT EXECUTE ON FUNCTION _private.user_belongs_to_family(UUID, UUID) TO authenticated;
-
--- Revoke all permissions on the _private schema from public
-REVOKE ALL ON SCHEMA _private FROM PUBLIC;
-REVOKE ALL ON SCHEMA _private FROM authenticated;
-
--- ============================================
 -- TRIGGERS FOR UPDATED_AT
 -- ============================================
 
@@ -210,3 +214,4 @@ COMMENT ON TABLE expenses IS 'Family expenses tracking in CLP';
 COMMENT ON TABLE products IS 'Inventory of essential consumable items';
 COMMENT ON TABLE shopping_items IS 'Shopping list with optional inventory integration';
 COMMENT ON TABLE tasks IS 'Pending tasks, paperwork and documents to manage';
+
