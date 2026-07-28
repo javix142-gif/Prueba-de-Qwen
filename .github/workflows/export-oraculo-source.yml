@@ -1,11 +1,12 @@
 name: Export Oraculo Source
 
 on:
-  push:
+  pull_request:
     branches:
-      - recovery/oraculo-source-v1.0.0
+      - main
     paths:
       - '.github/workflows/export-oraculo-source.yml'
+      - '.github/workflows/build-oraculo-apk.yml'
   workflow_dispatch:
 
 permissions:
