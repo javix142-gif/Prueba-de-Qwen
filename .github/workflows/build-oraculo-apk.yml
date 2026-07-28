@@ -7,6 +7,12 @@ on:
     paths:
       - 'oraculo-source.part*'
       - '.github/workflows/build-oraculo-apk.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'oraculo-source.part*'
+      - '.github/workflows/build-oraculo-apk.yml'
   workflow_dispatch:
 
 permissions:
