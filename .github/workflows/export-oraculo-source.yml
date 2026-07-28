@@ -1,0 +1,44 @@
+name: Export Oraculo Source
+
+on:
+  push:
+    branches:
+      - recovery/oraculo-source-v1.0.0
+    paths:
+      - '.github/workflows/export-oraculo-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: export-oraculo-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout archived source commit
+        uses: actions/checkout@v4
+
+      - name: Restore complete source tree
+        run: |
+          cat oraculo-source.part* > source.tar.gz.b64
+          base64 --decode source.tar.gz.b64 > source.tar.gz
+          tar -xzf source.tar.gz
+          cp oraculo-android-styles.xml oraculo-tarot-laura-android/app/src/main/res/values/styles.xml
+          test -f oraculo-tarot-laura-android/gradlew
+          test -f oraculo-tarot-laura-android/gradle/wrapper/gradle-wrapper.jar
+          test -f oraculo-tarot-laura-android/app/src/main/java/cl/oraculotarotlaura/app/MainActivity.java
+          test -f oraculo-tarot-laura-android/android-web/js/tarot-data.js
+          test "$(find oraculo-tarot-laura-android/android-web/assets/cards -maxdepth 1 -name '*.svg' ! -name 'card-back.svg' | wc -l)" -eq 22
+
+      - name: Upload complete source
+        uses: actions/upload-artifact@v4
+        with:
+          name: oraculo-tarot-laura-source-v1.0.0
+          path: oraculo-tarot-laura-android/
+          if-no-files-found: error
+          retention-days: 7
