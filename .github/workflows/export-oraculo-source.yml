@@ -37,6 +37,7 @@ jobs:
           base64 --decode source.tar.gz.b64 > source.tar.gz
           tar -xzf source.tar.gz
           cp oraculo-android-styles.xml oraculo-tarot-laura-android/app/src/main/res/values/styles.xml
+          sed -i "s/version '8.11.1'/version '8.7.0'/" oraculo-tarot-laura-android/build.gradle
 
       - name: Regenerate Gradle Wrapper 8.9 from official distribution
         run: |
