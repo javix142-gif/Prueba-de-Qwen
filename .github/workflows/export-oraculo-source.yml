@@ -24,22 +24,38 @@ jobs:
       - name: Checkout archived source commit
         uses: actions/checkout@v4
 
-      - name: Restore complete source tree
+      - name: Restore and inventory source tree
         run: |
           cat oraculo-source.part* > source.tar.gz.b64
           base64 --decode source.tar.gz.b64 > source.tar.gz
           tar -xzf source.tar.gz
           cp oraculo-android-styles.xml oraculo-tarot-laura-android/app/src/main/res/values/styles.xml
-          test -f oraculo-tarot-laura-android/gradlew
-          test -f oraculo-tarot-laura-android/gradle/wrapper/gradle-wrapper.jar
-          test -f oraculo-tarot-laura-android/app/src/main/java/cl/oraculotarotlaura/app/MainActivity.java
-          test -f oraculo-tarot-laura-android/android-web/js/tarot-data.js
-          test "$(find oraculo-tarot-laura-android/android-web/assets/cards -maxdepth 1 -name '*.svg' ! -name 'card-back.svg' | wc -l)" -eq 22
+          {
+            echo 'SOURCE RECOVERY INVENTORY'
+            echo "archive_sha256=$(sha256sum source.tar.gz | cut -d' ' -f1)"
+            echo "file_count=$(find oraculo-tarot-laura-android -type f | wc -l)"
+            echo "card_count=$(find oraculo-tarot-laura-android/android-web/assets/cards -maxdepth 1 -name '*.svg' ! -name 'card-back.svg' 2>/dev/null | wc -l)"
+            for path in \
+              oraculo-tarot-laura-android/gradlew \
+              oraculo-tarot-laura-android/gradle/wrapper/gradle-wrapper.jar \
+              oraculo-tarot-laura-android/gradle/wrapper/gradle-wrapper.properties \
+              oraculo-tarot-laura-android/app/src/main/java/cl/oraculotarotlaura/app/MainActivity.java \
+              oraculo-tarot-laura-android/app/build.gradle \
+              oraculo-tarot-laura-android/android-web/index.html \
+              oraculo-tarot-laura-android/android-web/js/tarot-data.js \
+              oraculo-tarot-laura-android/tests/tarot-engine.test.mjs; do
+              if test -f "$path"; then echo "present=$path"; else echo "missing=$path"; fi
+            done
+            echo 'FILES:'
+            find oraculo-tarot-laura-android -type f -printf '%P\n' | sort
+          } > recovery-report.txt
 
-      - name: Upload complete source
+      - name: Upload recovered tree and inventory
         uses: actions/upload-artifact@v4
         with:
           name: oraculo-tarot-laura-source-v1.0.0
-          path: oraculo-tarot-laura-android/
+          path: |
+            oraculo-tarot-laura-android/
+            recovery-report.txt
           if-no-files-found: error
           retention-days: 7
