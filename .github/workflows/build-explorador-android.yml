@@ -6,6 +6,11 @@ on:
     paths:
       - 'android-file-browser/**'
       - '.github/workflows/build-explorador-android.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android-file-browser/**'
+      - '.github/workflows/build-explorador-android.yml'
   workflow_dispatch:
 
 permissions:
