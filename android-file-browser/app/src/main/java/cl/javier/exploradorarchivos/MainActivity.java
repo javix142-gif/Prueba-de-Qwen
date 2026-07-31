@@ -8,11 +8,15 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -22,14 +26,17 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final int PICK_FOLDER = 100;
-    private final List<FileItem> items = new ArrayList<>();
+    private final List<FileItem> allItems = new ArrayList<>();
+    private final List<FileItem> visibleItems = new ArrayList<>();
     private Uri treeUri;
     private String currentDocumentId;
     private String rootDocumentId;
     private TextView pathView;
+    private EditText searchView;
     private ArrayAdapter<FileItem> adapter;
 
     @Override
@@ -79,11 +86,33 @@ public class MainActivity extends Activity {
 
         pathView = new TextView(this);
         pathView.setText("Selecciona una carpeta para comenzar");
-        pathView.setPadding(8, 16, 8, 16);
+        pathView.setPadding(8, 16, 8, 10);
         root.addView(pathView);
 
+        LinearLayout searchRow = new LinearLayout(this);
+        searchRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        searchView = new EditText(this);
+        searchView.setHint("Buscar por nombre...");
+        searchView.setSingleLine(true);
+        searchView.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        searchView.setPadding(20, 8, 12, 8);
+        searchRow.addView(searchView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        Button clearSearch = new Button(this);
+        clearSearch.setText("Limpiar");
+        clearSearch.setOnClickListener(v -> searchView.setText(""));
+        searchRow.addView(clearSearch, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(searchRow);
+
+        searchView.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { applyFilter(s.toString()); }
+            @Override public void afterTextChanged(Editable s) {}
+        });
+
         ListView list = new ListView(this);
-        adapter = new ArrayAdapter<FileItem>(this, android.R.layout.simple_list_item_2, android.R.id.text1, items) {
+        adapter = new ArrayAdapter<FileItem>(this, android.R.layout.simple_list_item_2, android.R.id.text1, visibleItems) {
             @Override
             public View getView(int position, View convertView, ViewGroup parent) {
                 View view = super.getView(position, convertView, parent);
@@ -96,16 +125,16 @@ public class MainActivity extends Activity {
             }
         };
         list.setAdapter(adapter);
-        list.setOnItemClickListener((parent, view, position, id) -> openItem(items.get(position)));
+        list.setOnItemClickListener((parent, view, position, id) -> openItem(visibleItems.get(position)));
         list.setOnItemLongClickListener((parent, view, position, id) -> {
-            FileItem item = items.get(position);
+            FileItem item = visibleItems.get(position);
             if (!item.directory) shareItem(item);
             return true;
         });
         root.addView(list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         TextView hint = new TextView(this);
-        hint.setText("Toca para abrir. Mantén presionado un archivo para compartirlo.");
+        hint.setText("Busca por nombre. Toca para abrir y mantén presionado para compartir.");
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(4, 16, 4, 4);
         root.addView(hint);
@@ -130,12 +159,13 @@ public class MainActivity extends Activity {
             getPreferences(MODE_PRIVATE).edit().putString("tree_uri", treeUri.toString()).apply();
             rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri);
             currentDocumentId = rootDocumentId;
+            searchView.setText("");
             loadDirectory();
         }
     }
 
     private void loadDirectory() {
-        items.clear();
+        allItems.clear();
         Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, currentDocumentId);
         String[] projection = {
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -150,20 +180,39 @@ public class MainActivity extends Activity {
                     String name = cursor.getString(1);
                     String mime = cursor.getString(2);
                     long size = cursor.isNull(3) ? 0 : cursor.getLong(3);
-                    items.add(new FileItem(id, name == null ? "Sin nombre" : name, mime, size));
+                    allItems.add(new FileItem(id, name == null ? "Sin nombre" : name, mime, size));
                 }
             }
-            Collections.sort(items, Comparator.comparing((FileItem f) -> !f.directory).thenComparing(f -> f.name.toLowerCase()));
-            adapter.notifyDataSetChanged();
-            pathView.setText("Carpeta: " + currentDocumentId + "  •  " + items.size() + " elementos");
+            Collections.sort(allItems, Comparator.comparing((FileItem f) -> !f.directory)
+                    .thenComparing(f -> f.name.toLowerCase(Locale.ROOT)));
+            applyFilter(searchView.getText().toString());
         } catch (Exception e) {
             Toast.makeText(this, "No se pudo leer la carpeta: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void applyFilter(String query) {
+        visibleItems.clear();
+        String normalized = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        for (FileItem item : allItems) {
+            if (normalized.isEmpty() || item.name.toLowerCase(Locale.ROOT).contains(normalized)) {
+                visibleItems.add(item);
+            }
+        }
+        if (adapter != null) adapter.notifyDataSetChanged();
+        if (pathView != null && currentDocumentId != null) {
+            if (normalized.isEmpty()) {
+                pathView.setText("Carpeta: " + currentDocumentId + "  •  " + allItems.size() + " elementos");
+            } else {
+                pathView.setText("Resultados: " + visibleItems.size() + " de " + allItems.size() + " elementos");
+            }
         }
     }
 
     private void openItem(FileItem item) {
         if (item.directory) {
             currentDocumentId = item.documentId;
+            searchView.setText("");
             loadDirectory();
             return;
         }
@@ -185,6 +234,7 @@ public class MainActivity extends Activity {
         int slash = currentDocumentId.lastIndexOf('/');
         if (slash > 0) currentDocumentId = currentDocumentId.substring(0, slash);
         else currentDocumentId = rootDocumentId;
+        searchView.setText("");
         loadDirectory();
     }
 
