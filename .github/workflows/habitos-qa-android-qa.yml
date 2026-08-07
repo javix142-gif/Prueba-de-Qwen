@@ -46,6 +46,17 @@ jobs:
           cache: gradle
           cache-dependency-path: apps/habitos-qa/**/*.gradle*
 
+      - name: Enable KVM for Android emulator
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+          ls -l /dev/kvm
+
       - name: Prepare Gradle and QA directory
         run: |
           test -f gradle/wrapper/gradle-wrapper.jar
@@ -173,7 +184,7 @@ jobs:
           - Source commit: $SOURCE_COMMIT
           - Workflow run: $GITHUB_RUN_ID
           - APK: Habitos-QA-v1.0.0-debug.apk
-          - Emulator: Android API 35 x86_64 on GitHub-hosted Linux runner
+          - Emulator: Android API 35 x86_64 on GitHub-hosted Linux runner with KVM acceleration
           - Emulator runner: ReactiveCircus/android-emulator-runner pinned at a421e43855164a8197daf9d8d40fe71c6996bb0d (v2.38.0)
           - Instrumented Room + Compose tests: passed
           - Smoke install/cold start/process check: passed
