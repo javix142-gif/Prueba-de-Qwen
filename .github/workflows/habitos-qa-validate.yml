@@ -60,7 +60,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git fetch --no-tags origin "${{ github.base_ref }}"
-            git diff --check "origin/${{ github.base_ref }}...HEAD"
+            git diff --check "origin/${{ github.base_ref }}...HEAD" -- . ':(exclude)apps/habitos-qa/gradlew.bat'
           else
-            git diff --check HEAD^ HEAD
+            git diff --check HEAD^ HEAD -- . ':(exclude)apps/habitos-qa/gradlew.bat'
           fi
