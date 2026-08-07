@@ -13,15 +13,19 @@ mkdir -p qa/screenshots qa/test-results
 
 ./gradlew connectedDebugAndroidTest --stacktrace
 
-adb pull /sdcard/Android/data/cl.habitosqa.app/files/screenshots/. qa/screenshots/
+TEST_OUTPUT_ROOT="app/build/outputs/connected_android_test_additional_output"
 for file in \
   01_empty_light.png \
   02_habits_light.png \
   03_history_light.png \
   04_habits_dark.png; do
-  test -s "qa/screenshots/$file"
+  source_file="$(find "$TEST_OUTPUT_ROOT" -type f -name "$file" -print -quit)"
+  test -n "$source_file"
+  cp "$source_file" "qa/screenshots/$file"
 done
-if [ -s qa/screenshots/05_large_text.png ]; then
+large_text_file="$(find "$TEST_OUTPUT_ROOT" -type f -name '05_large_text.png' -print -quit)"
+if [ -n "$large_text_file" ]; then
+  cp "$large_text_file" qa/screenshots/05_large_text.png
   echo "Large-text screenshot captured."
 fi
 

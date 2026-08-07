@@ -6,14 +6,14 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.test.core.app.takeScreenshot
+import androidx.test.core.graphics.writeToTestStorage
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import cl.habitosqa.app.data.local.HabitsDatabase
-import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -96,7 +96,6 @@ class ScreenshotScenarioTest {
 
     private fun capture(name: String) {
         composeRule.waitForIdle()
-        val dir = File(instrumentation.targetContext.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
-        assertTrue("No se pudo guardar $name", device.takeScreenshot(File(dir, name)))
+        takeScreenshot().writeToTestStorage(name.removeSuffix(".png"))
     }
 }
