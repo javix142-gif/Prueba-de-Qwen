@@ -2,8 +2,10 @@ package cl.habitosqa.app
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -70,7 +72,7 @@ class HabitosQaFlowTest {
         composeRule.onNodeWithText("Últimos 7 días").assertIsDisplayed()
         composeRule.onNodeWithText("Beber agua").assertIsDisplayed()
         composeRule.onAllNodesWithContentDescription("Completado").assertCountEquals(1)
-        composeRule.onNodeWithText("Hoy").performClick()
+        composeRule.onNode(hasText("Hoy") and hasClickAction()).performClick()
 
         openOptions("Leer 30 min")
         composeRule.onNodeWithText("Eliminar").performClick()
