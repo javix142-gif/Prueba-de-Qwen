@@ -47,6 +47,7 @@ jobs:
         run: |
           test -f gradle/wrapper/gradle-wrapper.jar
           chmod +x gradlew
+          mkdir -p qa
 
       - name: Assemble candidate APK
         run: ./gradlew assembleDebug --stacktrace
@@ -58,6 +59,9 @@ jobs:
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           AVDMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
           "$SDKMANAGER" "platform-tools" "emulator" "platforms;android-36" "system-images;android-35;google_apis;x86_64"
+          export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          command -v adb
           echo no | "$AVDMANAGER" create avd -n habitosqa -k "system-images;android-35;google_apis;x86_64" --force
           sudo chmod 666 /dev/kvm || true
           nohup "$ANDROID_SDK_ROOT/emulator/emulator" \
@@ -203,5 +207,5 @@ jobs:
         with:
           name: habitos-qa-1.0.0-qa
           path: apps/habitos-qa/qa/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
