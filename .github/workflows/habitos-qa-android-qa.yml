@@ -26,13 +26,16 @@ jobs:
   android-qa:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     defaults:
       run:
         working-directory: apps/habitos-qa
     steps:
-      - name: Checkout
+      - name: Checkout candidate commit
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up JDK 17
@@ -43,75 +46,91 @@ jobs:
           cache: gradle
           cache-dependency-path: apps/habitos-qa/**/*.gradle*
 
-      - name: Prepare Gradle
+      - name: Prepare Gradle and QA directory
         run: |
           test -f gradle/wrapper/gradle-wrapper.jar
           chmod +x gradlew
-          mkdir -p qa
+          mkdir -p qa/screenshots qa/test-results
+          {
+            echo "source_commit=$SOURCE_COMMIT"
+            echo "workflow_run=$GITHUB_RUN_ID"
+          } > qa/RUN_CONTEXT.txt
 
       - name: Assemble candidate APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Prepare Android emulator
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          AVDMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
-          "$SDKMANAGER" "platform-tools" "emulator" "platforms;android-36" "system-images;android-35;google_apis;x86_64"
-          export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
-          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
-          command -v adb
-          echo no | "$AVDMANAGER" create avd -n habitosqa -k "system-images;android-35;google_apis;x86_64" --force
-          sudo chmod 666 /dev/kvm || true
-          nohup "$ANDROID_SDK_ROOT/emulator/emulator" \
-            -avd habitosqa \
-            -no-window -no-audio -no-boot-anim \
-            -gpu swiftshader_indirect \
-            -accel on \
-            > "$RUNNER_TEMP/habitosqa-emulator.log" 2>&1 &
-          adb wait-for-device
-          for i in {1..90}; do
-            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then
-              break
+      - name: Run Android emulator QA
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          emulator-boot-timeout: 300
+          disable-animations: true
+          working-directory: apps/habitos-qa
+          script: |
+            set -euo pipefail
+            {
+              echo "size=$(adb shell wm size | tr -d '\r')"
+              echo "density=$(adb shell wm density | tr -d '\r')"
+              echo "android_release=$(adb shell getprop ro.build.version.release | tr -d '\r')"
+              echo "android_api=$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+              echo "abi=$(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
+            } > qa/EMULATOR_DEVICE.txt
+
+            ./gradlew connectedDebugAndroidTest --stacktrace
+
+            adb pull /sdcard/Android/data/cl.habitosqa.app/files/screenshots/. qa/screenshots/
+            for file in \
+              01_empty_light.png \
+              02_habits_light.png \
+              03_history_light.png \
+              04_habits_dark.png; do
+              test -s "qa/screenshots/$file"
+            done
+            if [ -s qa/screenshots/05_large_text.png ]; then
+              echo "Large-text screenshot captured."
             fi
+
+            adb uninstall cl.habitosqa.app >/dev/null 2>&1 || true
+            adb logcat -c
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop cl.habitosqa.app
+            adb shell am start -W -n cl.habitosqa.app/.MainActivity | tee qa/SMOKE_START.txt
+            sleep 3
+            PID="$(adb shell pidof cl.habitosqa.app | tr -d '\r')"
+            test -n "$PID"
+            adb shell dumpsys activity activities > qa/ACTIVITY_DUMPSYS.txt
+            grep -q "cl.habitosqa.app/.MainActivity" qa/ACTIVITY_DUMPSYS.txt
+            adb logcat -d -v threadtime > qa/logcat.txt
+            if grep -E -A8 -B3 "FATAL EXCEPTION|ANR in cl\.habitosqa\.app" qa/logcat.txt | grep -q "cl.habitosqa.app"; then
+              echo "Crash/ANR attributable to Hábitos QA detected."
+              exit 1
+            fi
+            {
+              echo "process_id=$PID"
+              echo "status=stable"
+            } > qa/SMOKE_RESULT.txt
+
+            reset_viewport() {
+              adb shell wm size reset >/dev/null 2>&1 || true
+              adb shell wm density reset >/dev/null 2>&1 || true
+            }
+            trap reset_viewport EXIT
+            adb shell wm size 880x1562
+            adb shell wm density 440
+            adb shell am force-stop cl.habitosqa.app
+            adb shell am start -W -n cl.habitosqa.app/.MainActivity > qa/SMALL_VIEWPORT_START.txt
             sleep 2
-          done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
-          adb shell input keyevent 82 || true
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-          adb shell wm size
-          adb shell wm density
-          adb shell getprop ro.build.version.release
-          adb shell getprop ro.build.version.sdk
-
-      - name: Room and Compose instrumented tests
-        run: ./gradlew connectedDebugAndroidTest --stacktrace
-
-      - name: Pull real screenshots
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p qa/screenshots
-          adb pull /sdcard/Android/data/cl.habitosqa.app/files/screenshots/. qa/screenshots/
-          for file in \
-            01_empty_light.png \
-            02_habits_light.png \
-            03_history_light.png \
-            04_habits_dark.png; do
-            test -s "qa/screenshots/$file"
-          done
-          if [ -s qa/screenshots/05_large_text.png ]; then
-            echo "Large-text screenshot captured."
-          fi
+            test -n "$(adb shell pidof cl.habitosqa.app | tr -d '\r')"
+            adb exec-out screencap -p > qa/screenshots/06_compact_viewport.png
+            reset_viewport
+            trap - EXIT
 
       - name: Prepare and verify APK
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p qa/test-results
           cp app/build/outputs/apk/debug/app-debug.apk qa/Habitos-QA-v1.0.0-debug.apk
           AAPT="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name aapt -print | sort -V | tail -1)"
           APKSIGNER="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner -print | sort -V | tail -1)"
@@ -137,61 +156,27 @@ jobs:
             echo "targetSdk=36"
             echo "size_bytes=$(stat -c%s qa/Habitos-QA-v1.0.0-debug.apk)"
             echo "internet_permission=absent"
-            echo "source_commit=$GITHUB_SHA"
+            echo "source_commit=$SOURCE_COMMIT"
             echo
             cat qa/APK_SIGNATURE.txt
           } > qa/APK_METADATA.txt
-          cp -R app/build/test-results/. qa/test-results/unit 2>/dev/null || true
           cp -R app/build/outputs/androidTest-results/. qa/test-results/android 2>/dev/null || true
-
-      - name: Smoke test candidate APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          adb uninstall cl.habitosqa.app >/dev/null 2>&1 || true
-          adb logcat -c
-          adb install -r qa/Habitos-QA-v1.0.0-debug.apk
-          adb shell am force-stop cl.habitosqa.app
-          adb shell am start -W -n cl.habitosqa.app/.MainActivity | tee qa/SMOKE_START.txt
-          sleep 3
-          PID="$(adb shell pidof cl.habitosqa.app | tr -d '\r')"
-          test -n "$PID"
-          adb shell dumpsys activity activities > qa/ACTIVITY_DUMPSYS.txt
-          grep -q "cl.habitosqa.app/.MainActivity" qa/ACTIVITY_DUMPSYS.txt
-          adb logcat -d -v threadtime > qa/logcat.txt
-          if grep -E -A8 -B3 "FATAL EXCEPTION|ANR in cl\.habitosqa\.app" qa/logcat.txt | grep -q "cl.habitosqa.app"; then
-            echo "Crash/ANR attributable to Hábitos QA detected."
-            exit 1
-          fi
-          echo "process_id=$PID" | tee qa/SMOKE_RESULT.txt
-          echo "status=stable" | tee -a qa/SMOKE_RESULT.txt
-
-      - name: Check representative compact viewport
-        shell: bash
-        run: |
-          set -euo pipefail
-          adb shell wm size 880x1562
-          adb shell wm density 440
-          adb shell am force-stop cl.habitosqa.app
-          adb shell am start -W -n cl.habitosqa.app/.MainActivity > qa/SMALL_VIEWPORT_START.txt
-          sleep 2
-          test -n "$(adb shell pidof cl.habitosqa.app | tr -d '\r')"
-          adb shell wm size reset
-          adb shell wm density reset
+          cp -R app/build/reports/androidTests/. qa/test-results/android-reports 2>/dev/null || true
 
       - name: Write QA report
         shell: bash
         run: |
           set -euo pipefail
-          cp "$RUNNER_TEMP/habitosqa-emulator.log" qa/emulator.log || true
           cat > qa/QA_REPORT.md <<EOF
           # Hábitos QA 1.0.0 — QA automático
 
-          - Source commit: $GITHUB_SHA
+          - Source commit: $SOURCE_COMMIT
+          - Workflow run: $GITHUB_RUN_ID
           - APK: Habitos-QA-v1.0.0-debug.apk
-          - Emulator: Android API 35 x86_64, headless GitHub-hosted runner
-          - Instrumented tests: executed with connectedDebugAndroidTest
-          - Smoke install/start: passed before artifact upload
+          - Emulator: Android API 35 x86_64 on GitHub-hosted Linux runner
+          - Emulator runner: ReactiveCircus/android-emulator-runner pinned at a421e43855164a8197daf9d8d40fe71c6996bb0d (v2.38.0)
+          - Instrumented Room + Compose tests: passed
+          - Smoke install/cold start/process check: passed
           - Package: cl.habitosqa.app
           - INTERNET permission: absent
           - Screenshots: real emulator captures in screenshots/
@@ -207,5 +192,5 @@ jobs:
         with:
           name: habitos-qa-1.0.0-qa
           path: apps/habitos-qa/qa/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
