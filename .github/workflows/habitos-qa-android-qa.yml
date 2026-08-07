@@ -80,7 +80,7 @@ jobs:
           disable-animations: true
           working-directory: apps/habitos-qa
           script: |
-            set -euo pipefail
+            set -eu
             {
               echo "size=$(adb shell wm size | tr -d '\r')"
               echo "density=$(adb shell wm density | tr -d '\r')"
