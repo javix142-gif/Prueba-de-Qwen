@@ -1,0 +1,67 @@
+name: Habitos QA - Validate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/habitos-qa/app/**'
+      - 'apps/habitos-qa/build.gradle.kts'
+      - 'apps/habitos-qa/settings.gradle.kts'
+      - 'apps/habitos-qa/gradle.properties'
+      - 'apps/habitos-qa/gradlew'
+      - 'apps/habitos-qa/gradlew.bat'
+      - 'apps/habitos-qa/gradle/wrapper/**'
+      - '.github/workflows/habitos-qa-validate.yml'
+      - '.github/workflows/habitos-qa-android-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: habitos-qa-validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/habitos-qa
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: apps/habitos-qa/**/*.gradle*
+
+      - name: Check Gradle Wrapper
+        run: |
+          test -f gradle/wrapper/gradle-wrapper.jar
+          chmod +x gradlew
+          ./gradlew --version
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Android lint
+        run: ./gradlew lintDebug --stacktrace
+
+      - name: Git diff check
+        working-directory: .
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            git diff --check "origin/${{ github.base_ref }}...HEAD" -- . ':(exclude)apps/habitos-qa/gradlew.bat'
+          else
+            git diff --check HEAD^ HEAD -- . ':(exclude)apps/habitos-qa/gradlew.bat'
+          fi
