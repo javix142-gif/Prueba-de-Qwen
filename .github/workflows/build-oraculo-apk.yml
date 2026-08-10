@@ -1,0 +1,13 @@
+name: Build Oraculo Tarot APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disabled-on-recovery-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Build intentionally disabled on source-recovery branch."
