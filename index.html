@@ -1,13 +1,1038 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>workspace</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Circuit Escape</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            touch-action: manipulation;
+        }
+
+        .game-container {
+            max-width: 900px;
+            width: 100%;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: #00ffff;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 4vw, 2rem);
+            text-align: center;
+        }
+
+        .info-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            width: 100%;
+            margin-bottom: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+
+        .info-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 0.85rem;
+        }
+
+        .info-label {
+            color: #888;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .info-value {
+            color: #fff;
+            font-weight: bold;
+            font-size: 1rem;
+            margin-top: 2px;
+        }
+
+        .info-value.cores { color: #ffcc00; }
+        .info-value.turns { color: #00ff88; }
+        .info-value.emp { color: #ff6600; }
+        .info-value.status { color: #00ffff; }
+        .info-value.best { color: #ff66cc; }
+
+        .board-container {
+            position: relative;
+            background: #0d0d15;
+            border: 2px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #gameBoard {
+            display: grid;
+            grid-template-columns: repeat(15, 1fr);
+            grid-template-rows: repeat(15, 1fr);
+            gap: 1px;
+            background: #1a1a2e;
+        }
+
+        .cell {
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.1s ease;
+        }
+
+        @media (min-width: 400px) {
+            .cell {
+                width: 26px;
+                height: 26px;
+                font-size: 16px;
+            }
+        }
+
+        @media (min-width: 500px) {
+            .cell {
+                width: 30px;
+                height: 30px;
+                font-size: 18px;
+            }
+        }
+
+        @media (min-width: 600px) {
+            .cell {
+                width: 34px;
+                height: 34px;
+                font-size: 20px;
+            }
+        }
+
+        .wall {
+            background: linear-gradient(135deg, #2a2a3e 0%, #1a1a2e 100%);
+            border: 1px solid #333;
+        }
+
+        .empty {
+            background: #0d0d15;
+        }
+
+        .player {
+            background: radial-gradient(circle, #00ff88 0%, #00aa55 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+            animation: pulse 1s infinite;
+        }
+
+        .drone {
+            background: radial-gradient(circle, #ff4444 0%, #aa0000 100%);
+            border-radius: 30%;
+            box-shadow: 0 0 8px rgba(255, 68, 68, 0.6);
+            animation: pulse 0.5s infinite;
+        }
+
+        .drone.frozen {
+            background: radial-gradient(circle, #4444ff 0%, #0000aa 100%);
+            box-shadow: 0 0 8px rgba(68, 68, 255, 0.6);
+            animation: none;
+        }
+
+        .core {
+            background: radial-gradient(circle, #ffcc00 0%, #ff8800 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(255, 204, 0, 0.8);
+            animation: glow 1.5s infinite alternate;
+        }
+
+        .emp-item {
+            background: radial-gradient(circle, #ff6600 0%, #cc4400 100%);
+            border-radius: 10%;
+            box-shadow: 0 0 10px rgba(255, 102, 0, 0.8);
+            animation: glow 1s infinite alternate;
+        }
+
+        .exit {
+            background: radial-gradient(circle, #00ffff 0%, #0088aa 100%);
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(0.9); }
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 5px currentColor; }
+            to { box-shadow: 0 0 15px currentColor; }
+        }
+
+        .controls-section {
+            width: 100%;
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .seed-controls {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+            max-width: 400px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            min-width: 150px;
+            padding: 8px 12px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #00ffff;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: bold;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00ffff 0%, #0088aa);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 255, 255, 0.4);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #ff6600 0%, #cc4400);
+            color: #fff;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(255, 102, 0, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4444 0%, #aa0000);
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(255, 68, 68, 0.4);
+        }
+
+        .dpad {
+            display: grid;
+            grid-template-areas:
+                ". up ."
+                "left . right"
+                ". down .";
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .dpad-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #333 0%, #222 100%);
+            color: #fff;
+            border: 2px solid #444;
+        }
+
+        .dpad-btn:active {
+            background: linear-gradient(135deg, #00ffff 0%, #0088aa);
+            color: #000;
+        }
+
+        .dpad-up { grid-area: up; }
+        .dpad-down { grid-area: down; }
+        .dpad-left { grid-area: left; }
+        .dpad-right { grid-area: right; }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        .instructions {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 0.8rem;
+            color: #aaa;
+            text-align: center;
+            max-width: 500px;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .overlay.active {
+            display: flex;
+        }
+
+        .overlay-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #0a0a0f 100%);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            border: 2px solid #333;
+            max-width: 90%;
+        }
+
+        .overlay-title {
+            font-size: 2rem;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        .overlay-title.win { color: #00ff88; }
+        .overlay-title.lose { color: #ff4444; }
+        .overlay-title.pause { color: #00ffff; }
+
+        .overlay-score {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #ccc;
+        }
+
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 8px;
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            font-size: 0.75rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>⚡ Circuit Escape ⚡</h1>
+
+        <div class="info-panel">
+            <div class="info-item">
+                <div class="info-label">Núcleos</div>
+                <div class="info-value cores" id="coresDisplay">0/3</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Turnos</div>
+                <div class="info-value turns" id="turnsDisplay">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">EMP</div>
+                <div class="info-value emp" id="empDisplay">Listo</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Estado</div>
+                <div class="info-value status" id="statusDisplay">Jugando</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Mejor Puntaje</div>
+                <div class="info-value best" id="bestScoreDisplay">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Semilla</div>
+                <div class="info-value" id="seedDisplay" style="font-size: 0.7rem; word-break: break-all;"></div>
+            </div>
+        </div>
+
+        <div class="board-container">
+            <div id="gameBoard"></div>
+        </div>
+
+        <div class="controls-section">
+            <div class="seed-controls">
+                <input type="text" id="seedInput" placeholder="Ingresa una semilla o deja vacío para aleatoria">
+                <button class="btn-primary" onclick="game.newGame()">Nueva Partida</button>
+                <button class="btn-secondary" onclick="game.randomSeed()">Semilla Aleatoria</button>
+            </div>
+
+            <div class="dpad">
+                <button class="dpad-btn dpad-up" ontouchstart="game.handleInput('up')" onmousedown="game.handleInput('up')">▲</button>
+                <button class="dpad-btn dpad-left" ontouchstart="game.handleInput('left')" onmousedown="game.handleInput('left')">◀</button>
+                <button class="dpad-btn dpad-right" ontouchstart="game.handleInput('right')" onmousedown="game.handleInput('right')">▶</button>
+                <button class="dpad-btn dpad-down" ontouchstart="game.handleInput('down')" onmousedown="game.handleInput('down')">▼</button>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn-primary" onclick="game.togglePause()">Pausar (P)</button>
+                <button class="btn-secondary" onclick="game.restartGame()">Reiniciar</button>
+                <button class="btn-danger" onclick="game.useEMP()" id="empButton">Usar EMP</button>
+            </div>
+
+            <div class="instructions">
+                <strong>Instrucciones:</strong> Recoge los 3 núcleos amarillos y llega a la salida cyan.<br>
+                Evita los drones rojos. Usa el EMP para congelarlos 3 turnos.<br>
+                Controles: Flechas, WASD, o botones táctiles.
+            </div>
+
+            <div class="legend">
+                <div class="legend-item"><div class="legend-icon player"></div> Jugador</div>
+                <div class="legend-item"><div class="legend-icon drone"></div> Drone</div>
+                <div class="legend-item"><div class="legend-icon core"></div> Núcleo</div>
+                <div class="legend-item"><div class="legend-icon emp-item"></div> EMP</div>
+                <div class="legend-item"><div class="legend-icon exit"></div> Salida</div>
+                <div class="legend-item"><div class="legend-icon wall"></div> Muro</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="overlay">
+        <div class="overlay-content">
+            <h2 class="overlay-title" id="overlayTitle"></h2>
+            <p class="overlay-score" id="overlayScore"></p>
+            <button class="btn-primary" onclick="game.closeOverlay()">Continuar</button>
+        </div>
+    </div>
+
+    <script>
+        // Seeded Random Number Generator (Mulberry32)
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+
+            next() {
+                let t = this.seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+
+            nextInt(min, max) {
+                return Math.floor(this.next() * (max - min + 1)) + min;
+            }
+
+            shuffle(array) {
+                const arr = [...array];
+                for (let i = arr.length - 1; i > 0; i--) {
+                    const j = this.nextInt(0, i);
+                    [arr[i], arr[j]] = [arr[j], arr[i]];
+                }
+                return arr;
+            }
+        }
+
+        // Game Logic
+        class CircuitEscape {
+            constructor() {
+                this.boardSize = 15;
+                this.board = [];
+                this.player = { x: 0, y: 0 };
+                this.drones = [];
+                this.cores = [];
+                this.collectedCores = 0;
+                this.exit = { x: 0, y: 0 };
+                this.empItem = null;
+                this.empFrozen = 0;
+                this.turns = 0;
+                this.gameState = 'playing';
+                this.seed = '';
+                this.rng = null;
+                this.inputLocked = false;
+
+                this.loadBestScore();
+                this.setupKeyboard();
+                this.newGame();
+            }
+
+            loadBestScore() {
+                try {
+                    const saved = localStorage.getItem('circuitEscapeBestScore');
+                    this.bestScore = saved ? parseInt(saved) : 0;
+                } catch (e) {
+                    this.bestScore = 0;
+                }
+                document.getElementById('bestScoreDisplay').textContent = this.bestScore;
+            }
+
+            saveBestScore(score) {
+                if (score > this.bestScore) {
+                    this.bestScore = score;
+                    try {
+                        localStorage.setItem('circuitEscapeBestScore', this.bestScore.toString());
+                    } catch (e) {}
+                    document.getElementById('bestScoreDisplay').textContent = this.bestScore;
+                }
+            }
+
+            randomSeed() {
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let seed = '';
+                for (let i = 0; i < 8; i++) {
+                    seed += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                document.getElementById('seedInput').value = seed;
+                return seed;
+            }
+
+            newGame() {
+                let seedStr = document.getElementById('seedInput').value.trim();
+                if (!seedStr) {
+                    seedStr = this.randomSeed();
+                }
+                this.seed = seedStr;
+
+                let seedNum = 0;
+                for (let i = 0; i < seedStr.length; i++) {
+                    seedNum = Math.imul(31, seedNum) + seedStr.charCodeAt(i) | 0;
+                }
+                seedNum = Math.abs(seedNum);
+
+                this.rng = new SeededRandom(seedNum);
+                this.generateLevel();
+                this.resetGameState();
+                this.render();
+                this.updateUI();
+            }
+
+            resetGameState() {
+                this.collectedCores = 0;
+                this.turns = 0;
+                this.empFrozen = 0;
+                this.gameState = 'playing';
+                this.inputLocked = false;
+                document.getElementById('overlay').classList.remove('active');
+            }
+
+            restartGame() {
+                this.newGame();
+            }
+
+            generateLevel() {
+                let valid = false;
+                while (!valid) {
+                    this.generateBoard();
+                    valid = this.validateLevel();
+                }
+            }
+
+            generateBoard() {
+                this.board = [];
+                for (let y = 0; y < this.boardSize; y++) {
+                    this.board[y] = [];
+                    for (let x = 0; x < this.boardSize; x++) {
+                        this.board[y][x] = 'empty';
+                    }
+                }
+
+                const wallChance = 0.25;
+                for (let y = 1; y < this.boardSize - 1; y++) {
+                    for (let x = 1; x < this.boardSize - 1; x++) {
+                        if (this.rng.next() < wallChance) {
+                            this.board[y][x] = 'wall';
+                        }
+                    }
+                }
+
+                let playerPlaced = false;
+                while (!playerPlaced) {
+                    const px = this.rng.nextInt(1, 4);
+                    const py = this.rng.nextInt(this.boardSize - 4, this.boardSize - 2);
+                    if (this.board[py][px] !== 'wall') {
+                        this.player = { x: px, y: py };
+                        this.board[py][px] = 'empty';
+                        playerPlaced = true;
+                    }
+                }
+
+                let exitPlaced = false;
+                while (!exitPlaced) {
+                    const ex = this.rng.nextInt(this.boardSize - 4, this.boardSize - 2);
+                    const ey = this.rng.nextInt(1, 4);
+                    if (this.board[ey][ex] !== 'wall' && (ex !== this.player.x || ey !== this.player.y)) {
+                        this.exit = { x: ex, y: ey };
+                        this.board[ey][ex] = 'empty';
+                        exitPlaced = true;
+                    }
+                }
+
+                this.cores = [];
+                const corePositions = [
+                    { x: this.rng.nextInt(5, 9), y: this.rng.nextInt(5, 9) },
+                    { x: this.rng.nextInt(1, 4), y: this.rng.nextInt(5, 9) },
+                    { x: this.rng.nextInt(10, 13), y: this.rng.nextInt(10, 13) }
+                ];
+
+                for (const pos of corePositions) {
+                    if (this.board[pos.y][pos.x] !== 'wall' &&
+                        !(pos.x === this.player.x && pos.y === this.player.y) &&
+                        !(pos.x === this.exit.x && pos.y === this.exit.y)) {
+                        this.cores.push({ x: pos.x, y: pos.y, collected: false });
+                    }
+                }
+
+                if (this.cores.length < 3) {
+                    this.cores = [];
+                    return;
+                }
+
+                let empPlaced = false;
+                let attempts = 0;
+                while (!empPlaced && attempts < 50) {
+                    const ex = this.rng.nextInt(1, this.boardSize - 2);
+                    const ey = this.rng.nextInt(1, this.boardSize - 2);
+                    if (this.board[ey][ex] !== 'wall' &&
+                        !(ex === this.player.x && ey === this.player.y) &&
+                        !(ex === this.exit.x && ey === this.exit.y) &&
+                        !this.cores.some(c => c.x === ex && c.y === ey)) {
+                        this.empItem = { x: ex, y: ey, collected: false };
+                        empPlaced = true;
+                    }
+                    attempts++;
+                }
+
+                this.drones = [];
+                const droneStarts = [
+                    { x: this.rng.nextInt(5, 9), y: this.rng.nextInt(1, 4) },
+                    { x: this.rng.nextInt(1, 4), y: this.rng.nextInt(10, 13) }
+                ];
+
+                for (const pos of droneStarts) {
+                    if (this.board[pos.y][pos.x] !== 'wall' &&
+                        !(pos.x === this.player.x && pos.y === this.player.y) &&
+                        !(pos.x === this.exit.x && pos.y === this.exit.y) &&
+                        !this.cores.some(c => c.x === pos.x && c.y === pos.y) &&
+                        !this.drones.some(d => d.x === pos.x && d.y === pos.y)) {
+                        this.drones.push({ x: pos.x, y: pos.y, frozen: 0 });
+                    }
+                }
+
+                if (this.drones.length < 2) {
+                    this.drones = [];
+                    return;
+                }
+            }
+
+            validateLevel() {
+                for (const core of this.cores) {
+                    if (!this.hasPath(this.player, core)) {
+                        return false;
+                    }
+                }
+
+                for (const core of this.cores) {
+                    if (!this.hasPath(core, this.exit)) {
+                        return false;
+                    }
+                }
+
+                if (!this.hasPath(this.player, this.exit)) {
+                    return false;
+                }
+
+                for (const drone of this.drones) {
+                    if (!this.hasPath(drone, this.player)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            hasPath(start, end) {
+                const visited = new Set();
+                const queue = [{ x: start.x, y: start.y }];
+                visited.add(`${start.x},${start.y}`);
+
+                const directions = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
+
+                while (queue.length > 0) {
+                    const current = queue.shift();
+
+                    if (current.x === end.x && current.y === end.y) {
+                        return true;
+                    }
+
+                    for (const dir of directions) {
+                        const nx = current.x + dir.dx;
+                        const ny = current.y + dir.dy;
+
+                        if (nx >= 0 && nx < this.boardSize && ny >= 0 && ny < this.boardSize) {
+                            const key = `${nx},${ny}`;
+                            if (!visited.has(key) && this.board[ny][nx] !== 'wall') {
+                                visited.add(key);
+                                queue.push({ x: nx, y: ny });
+                            }
+                        }
+                    }
+                }
+
+                return false;
+            }
+
+            findPath(start, end) {
+                const visited = new Map();
+                const queue = [{ x: start.x, y: start.y, path: [] }];
+                visited.set(`${start.x},${start.y}`, []);
+
+                const directions = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
+
+                while (queue.length > 0) {
+                    const current = queue.shift();
+
+                    if (current.x === end.x && current.y === end.y) {
+                        return current.path;
+                    }
+
+                    for (const dir of directions) {
+                        const nx = current.x + dir.dx;
+                        const ny = current.y + dir.dy;
+
+                        if (nx >= 0 && nx < this.boardSize && ny >= 0 && ny < this.boardSize) {
+                            const key = `${nx},${ny}`;
+                            if (!visited.has(key) && this.board[ny][nx] !== 'wall') {
+                                const newPath = [...current.path, { x: nx, y: ny }];
+                                visited.set(key, newPath);
+                                queue.push({ x: nx, y: ny, path: newPath });
+                            }
+                        }
+                    }
+                }
+
+                return null;
+            }
+
+            setupKeyboard() {
+                document.addEventListener('keydown', (e) => {
+                    if (this.gameState !== 'playing') {
+                        if (e.key.toLowerCase() === 'p' && (this.gameState === 'won' || this.gameState === 'lost')) {
+                            this.newGame();
+                        }
+                        return;
+                    }
+
+                    switch (e.key.toLowerCase()) {
+                        case 'arrowup':
+                        case 'w':
+                            e.preventDefault();
+                            this.handleInput('up');
+                            break;
+                        case 'arrowdown':
+                        case 's':
+                            e.preventDefault();
+                            this.handleInput('down');
+                            break;
+                        case 'arrowleft':
+                        case 'a':
+                            e.preventDefault();
+                            this.handleInput('left');
+                            break;
+                        case 'arrowright':
+                        case 'd':
+                            e.preventDefault();
+                            this.handleInput('right');
+                            break;
+                        case 'p':
+                            e.preventDefault();
+                            this.togglePause();
+                            break;
+                    }
+                });
+            }
+
+            handleInput(direction) {
+                if (this.gameState !== 'playing' || this.inputLocked) return;
+
+                let dx = 0, dy = 0;
+                switch (direction) {
+                    case 'up': dy = -1; break;
+                    case 'down': dy = 1; break;
+                    case 'left': dx = -1; break;
+                    case 'right': dx = 1; break;
+                }
+
+                const newX = this.player.x + dx;
+                const newY = this.player.y + dy;
+
+                if (newX < 0 || newX >= this.boardSize || newY < 0 || newY >= this.boardSize) return;
+                if (this.board[newY][newX] === 'wall') return;
+
+                this.player.x = newX;
+                this.player.y = newY;
+                this.turns++;
+
+                for (const core of this.cores) {
+                    if (!core.collected && core.x === this.player.x && core.y === this.player.y) {
+                        core.collected = true;
+                        this.collectedCores++;
+                    }
+                }
+
+                if (this.empItem && !this.empItem.collected &&
+                    this.empItem.x === this.player.x && this.empItem.y === this.player.y) {
+                    this.empItem.collected = true;
+                }
+
+                this.moveDrones();
+
+                for (const drone of this.drones) {
+                    if (drone.x === this.player.x && drone.y === this.player.y) {
+                        this.gameOver(false);
+                        return;
+                    }
+                }
+
+                if (this.collectedCores >= 3 &&
+                    this.player.x === this.exit.x && this.player.y === this.exit.y) {
+                    this.gameOver(true);
+                    return;
+                }
+
+                if (this.empFrozen > 0) {
+                    this.empFrozen--;
+                }
+
+                this.render();
+                this.updateUI();
+            }
+
+            moveDrones() {
+                if (this.empFrozen > 0) return;
+
+                const occupiedByDrone = new Set();
+                for (const drone of this.drones) {
+                    occupiedByDrone.add(`${drone.x},${drone.y}`);
+                }
+
+                for (let i = 0; i < this.drones.length; i++) {
+                    const drone = this.drones[i];
+
+                    const path = this.findPath(drone, this.player);
+
+                    if (path && path.length > 0) {
+                        const nextPos = path[0];
+
+                        const nextKey = `${nextPos.x},${nextPos.y}`;
+                        if (!occupiedByDrone.has(nextKey)) {
+                            occupiedByDrone.delete(`${drone.x},${drone.y}`);
+                            drone.x = nextPos.x;
+                            drone.y = nextPos.y;
+                            occupiedByDrone.add(nextKey);
+                        }
+                    }
+                }
+            }
+
+            togglePause() {
+                if (this.gameState === 'playing') {
+                    this.gameState = 'paused';
+                    this.showOverlay('Pausa', '', 'pause');
+                } else if (this.gameState === 'paused') {
+                    this.gameState = 'playing';
+                    document.getElementById('overlay').classList.remove('active');
+                }
+                this.updateUI();
+            }
+
+            useEMP() {
+                if (this.gameState !== 'playing' || !this.empItem || !this.empItem.collected || this.empFrozen > 0) return;
+
+                this.empFrozen = 3;
+                this.render();
+                this.updateUI();
+            }
+
+            gameOver(won) {
+                this.gameState = won ? 'won' : 'lost';
+                this.inputLocked = true;
+
+                let score = 0;
+                if (won) {
+                    score = Math.max(0, 1000 - this.turns * 2);
+                    if (this.empItem && !this.empItem.collected) {
+                        score += 200;
+                    }
+                    this.saveBestScore(score);
+                }
+
+                const title = won ? '¡Victoria!' : '¡Derrota!';
+                const titleClass = won ? 'win' : 'lose';
+                const message = won ? `Puntaje: ${score}` : 'Los drones te capturaron';
+
+                this.showOverlay(title, message, titleClass);
+                this.updateUI();
+            }
+
+            showOverlay(title, score, className) {
+                const overlay = document.getElementById('overlay');
+                const overlayTitle = document.getElementById('overlayTitle');
+                const overlayScore = document.getElementById('overlayScore');
+
+                overlayTitle.textContent = title;
+                overlayTitle.className = `overlay-title ${className}`;
+                overlayScore.textContent = score;
+                overlay.classList.add('active');
+            }
+
+            closeOverlay() {
+                if (this.gameState === 'won' || this.gameState === 'lost') {
+                    this.newGame();
+                } else if (this.gameState === 'paused') {
+                    this.togglePause();
+                }
+            }
+
+            render() {
+                const boardEl = document.getElementById('gameBoard');
+                boardEl.innerHTML = '';
+
+                for (let y = 0; y < this.boardSize; y++) {
+                    for (let x = 0; x < this.boardSize; x++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+
+                        if (this.board[y][x] === 'wall') {
+                            cell.classList.add('wall');
+                        } else {
+                            cell.classList.add('empty');
+                        }
+
+                        const isPlayer = this.player.x === x && this.player.y === y;
+                        const isDrone = this.drones.some(d => d.x === x && d.y === y);
+                        const isCore = this.cores.some(c => !c.collected && c.x === x && c.y === y);
+                        const isEmp = this.empItem && !this.empItem.collected && this.empItem.x === x && this.empItem.y === y;
+                        const isExit = this.exit.x === x && this.exit.y === y;
+
+                        if (isPlayer) {
+                            cell.classList.add('player');
+                            cell.textContent = '';
+                        } else if (isDrone) {
+                            const drone = this.drones.find(d => d.x === x && d.y === y);
+                            cell.classList.add('drone');
+                            if (this.empFrozen > 0) {
+                                cell.classList.add('frozen');
+                            }
+                            cell.textContent = '';
+                        } else if (isCore) {
+                            cell.classList.add('core');
+                            cell.textContent = '';
+                        } else if (isEmp) {
+                            cell.classList.add('emp-item');
+                            cell.textContent = '';
+                        } else if (isExit) {
+                            cell.classList.add('exit');
+                            cell.textContent = '';
+                        }
+
+                        boardEl.appendChild(cell);
+                    }
+                }
+            }
+
+            updateUI() {
+                document.getElementById('coresDisplay').textContent = `${this.collectedCores}/3`;
+                document.getElementById('turnsDisplay').textContent = this.turns;
+
+                const empStatus = document.getElementById('empDisplay');
+                const empButton = document.getElementById('empButton');
+
+                if (!this.empItem || !this.empItem.collected) {
+                    empStatus.textContent = 'No obtenido';
+                    empButton.disabled = true;
+                    empButton.style.opacity = '0.5';
+                } else if (this.empFrozen > 0) {
+                    empStatus.textContent = `${this.empFrozen} turnos`;
+                    empButton.disabled = true;
+                    empButton.style.opacity = '0.5';
+                } else {
+                    empStatus.textContent = 'Listo';
+                    empButton.disabled = false;
+                    empButton.style.opacity = '1';
+                }
+
+                const statusMap = {
+                    'playing': 'Jugando',
+                    'paused': 'Pausado',
+                    'won': 'Victoria',
+                    'lost': 'Derrota'
+                };
+                document.getElementById('statusDisplay').textContent = statusMap[this.gameState];
+                document.getElementById('seedDisplay').textContent = this.seed;
+            }
+        }
+
+        const game = new CircuitEscape();
+    </script>
+</body>
 </html>
