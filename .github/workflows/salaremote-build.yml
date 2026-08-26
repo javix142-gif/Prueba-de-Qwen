@@ -4,7 +4,7 @@ on:
   push:
     branches: ["sala-remote-build"]
     paths:
-      - "SalaRemote_Android_Source.zip"
+      - "SalaRemote/**"
       - ".github/workflows/salaremote-build.yml"
   workflow_dispatch:
 
@@ -18,34 +18,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
       - name: Install Android SDK 36
         run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
-
-      - name: Extract source
-        run: unzip -o SalaRemote_Android_Source.zip
-
       - name: Build debug APK
         working-directory: SalaRemote
         run: gradle --no-daemon :app:assembleDebug
-
       - name: Prepare APK
         run: cp SalaRemote/app/build/outputs/apk/debug/app-debug.apk SalaRemote-Kaicun.apk
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
