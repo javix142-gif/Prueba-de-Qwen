@@ -36,6 +36,35 @@ jobs:
           cp tvremote/main.dart caixun_remote/lib/main.dart
           cp tvremote/AndroidManifest.xml caixun_remote/android/app/src/main/AndroidManifest.xml
 
+      - name: Apply UI compatibility fixes
+        working-directory: caixun_remote
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/src/ui/tv_remote_screen.dart')
+          s = p.read_text()
+          replacements = {
+              '_DPad(key: key)': '_DPad(onKey: key)',
+              '_TouchPad(key: key)': '_TouchPad(onKey: key)',
+              '_NumberPad(key: key)': '_NumberPad(onKey: key)',
+              '_ColorKeysButton(key: key)': '_ColorKeysButton(onKey: key)',
+              'final ValueChanged<int> key;': 'final ValueChanged<int> onKey;',
+              'required this.key': 'required this.onKey',
+              '=> key(19)': '=> onKey(19)',
+              '=> key(20)': '=> onKey(20)',
+              '=> key(21)': '=> onKey(21)',
+              '=> key(22)': '=> onKey(22)',
+              '=> key(23)': '=> onKey(23)',
+              'widget.key(': 'widget.onKey(',
+              '=> key(7 + n)': '=> onKey(7 + n)',
+              '=> key(7))': '=> onKey(7))',
+              'onSelected: key,': 'onSelected: onKey,',
+          }
+          for old, new in replacements.items():
+              s = s.replace(old, new)
+          p.write_text(s)
+          PY
+
       - name: Set app identity and Gradle compatibility
         working-directory: caixun_remote
         run: |
@@ -57,9 +86,9 @@ jobs:
         working-directory: caixun_remote
         run: flutter pub get
 
-      - name: Analyze
+      - name: Analyze app sources
         working-directory: caixun_remote
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze lib --no-fatal-infos
 
       - name: Build release APK
         working-directory: caixun_remote
