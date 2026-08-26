@@ -42,3 +42,4 @@ jobs:
           name: SalaRemote-Kaicun-APK
           path: SalaRemote-Kaicun.apk
           if-no-files-found: error
+# source committed directly to avoid binary archive corruption
