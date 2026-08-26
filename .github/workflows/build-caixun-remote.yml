@@ -73,65 +73,68 @@ jobs:
           p = Path('lib/src/ui/tv_remote_screen.dart')
           s = p.read_text()
           import_anchor = "import '../providers/settings_provider.dart';\n"
-          cast_helper = """
-
-const MethodChannel _castChannel = MethodChannel('cl.javix.caixunremote/cast');
-
-Future<void> _openCastSettings(BuildContext context) async {
-  try {
-    final result = await _castChannel.invokeMethod<String>('openCastSettings');
-    if (!context.mounted) return;
-    if (result == 'fallback') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tu teléfono no expone el selector directo de Cast. Se abrieron los ajustes inalámbricos.')),
-      );
-    }
-  } on PlatformException catch (e) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('No se pudo abrir Proyectar pantalla: ${e.message ?? 'error desconocido'}')),
-    );
-  }
-}
-"""
+          cast_helper = "\n".join([
+              "",
+              "const MethodChannel _castChannel = MethodChannel('cl.javix.caixunremote/cast');",
+              "",
+              "Future<void> _openCastSettings(BuildContext context) async {",
+              "  try {",
+              "    final result = await _castChannel.invokeMethod<String>('openCastSettings');",
+              "    if (!context.mounted) return;",
+              "    if (result == 'fallback') {",
+              "      ScaffoldMessenger.of(context).showSnackBar(",
+              "        const SnackBar(content: Text('Tu teléfono no expone el selector directo de Cast. Se abrieron los ajustes inalámbricos.')),
+              "      );",
+              "    }",
+              "  } on PlatformException catch (e) {",
+              "    if (!context.mounted) return;",
+              "    ScaffoldMessenger.of(context).showSnackBar(",
+              "      SnackBar(content: Text(\"No se pudo abrir Proyectar pantalla: ${e.message ?? 'error desconocido'}\")),",
+              "    );",
+              "  }",
+              "}",
+              "",
+          ])
           if '_castChannel' not in s:
               if import_anchor not in s:
                   raise SystemExit('Import anchor not found')
               s = s.replace(import_anchor, import_anchor + cast_helper, 1)
 
-          remote_anchor = """        _Header(
-          title: widget.tv.name,
-          subtitle: 'Conectado',
-          connected: true,
-          onReconnect: n.resetAndScan,
-        ),
-        Expanded(
-"""
-          remote_replacement = """        _Header(
-          title: widget.tv.name,
-          subtitle: 'Conectado',
-          connected: true,
-          onReconnect: n.resetAndScan,
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-          child: SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _openCastSettings(context),
-              icon: const Icon(Icons.cast_connected_rounded),
-              label: const Text('PROYECTAR PANTALLA'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: C.accent,
-                side: const BorderSide(color: C.accent),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                textStyle: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: .6),
-              ),
-            ),
-          ),
-        ),
-        Expanded(
-"""
+          remote_anchor = "\n".join([
+              "        _Header(",
+              "          title: widget.tv.name,",
+              "          subtitle: 'Conectado',",
+              "          connected: true,",
+              "          onReconnect: n.resetAndScan,",
+              "        ),",
+              "        Expanded(",
+          ]) + "\n"
+          remote_replacement = "\n".join([
+              "        _Header(",
+              "          title: widget.tv.name,",
+              "          subtitle: 'Conectado',",
+              "          connected: true,",
+              "          onReconnect: n.resetAndScan,",
+              "        ),",
+              "        Padding(",
+              "          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),",
+              "          child: SizedBox(",
+              "            width: double.infinity,",
+              "            child: OutlinedButton.icon(",
+              "              onPressed: () => _openCastSettings(context),",
+              "              icon: const Icon(Icons.cast_connected_rounded),",
+              "              label: const Text('PROYECTAR PANTALLA'),",
+              "              style: OutlinedButton.styleFrom(",
+              "                foregroundColor: C.accent,",
+              "                side: const BorderSide(color: C.accent),",
+              "                padding: const EdgeInsets.symmetric(vertical: 12),",
+              "                textStyle: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: .6),",
+              "              ),",
+              "            ),",
+              "          ),",
+              "        ),",
+              "        Expanded(",
+          ]) + "\n"
           if 'PROYECTAR PANTALLA' not in s:
               if remote_anchor not in s:
                   raise SystemExit('Remote UI anchor not found')
