@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -36,7 +36,7 @@ jobs:
           cp tvremote/main.dart caixun_remote/lib/main.dart
           cp tvremote/AndroidManifest.xml caixun_remote/android/app/src/main/AndroidManifest.xml
 
-      - name: Set app identity
+      - name: Set app identity and Gradle compatibility
         working-directory: caixun_remote
         run: |
           python3 - <<'PY'
@@ -48,11 +48,18 @@ jobs:
           q = Path('pubspec.yaml')
           t = q.read_text().replace('description: "A new Flutter project."', 'description: "Control remoto Wi-Fi para Android TV, Google TV y televisores Caixun compatibles."')
           q.write_text(t)
+          g = Path('android/gradle/wrapper/gradle-wrapper.properties')
+          u = g.read_text().replace('gradle-8.13-bin.zip', 'gradle-8.14-bin.zip')
+          g.write_text(u)
           PY
 
       - name: Install dependencies
         working-directory: caixun_remote
         run: flutter pub get
+
+      - name: Analyze
+        working-directory: caixun_remote
+        run: flutter analyze --no-fatal-infos
 
       - name: Build release APK
         working-directory: caixun_remote
