@@ -83,7 +83,7 @@ jobs:
               "    if (!context.mounted) return;",
               "    if (result == 'fallback') {",
               "      ScaffoldMessenger.of(context).showSnackBar(",
-              "        const SnackBar(content: Text('Tu teléfono no expone el selector directo de Cast. Se abrieron los ajustes inalámbricos.')),
+              "        const SnackBar(content: Text('Tu teléfono no expone el selector directo de Cast. Se abrieron los ajustes inalámbricos.')),",
               "      );",
               "    }",
               "  } on PlatformException catch (e) {",
