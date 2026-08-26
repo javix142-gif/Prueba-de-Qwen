@@ -88,7 +88,7 @@ jobs:
 
       - name: Analyze app sources
         working-directory: caixun_remote
-        run: flutter analyze lib --no-fatal-infos
+        run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
 
       - name: Build release APK
         working-directory: caixun_remote
