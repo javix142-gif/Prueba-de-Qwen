@@ -1,0 +1,70 @@
+name: Build Caixun Remote APK
+
+on:
+  push:
+    branches:
+      - tv-remote-caixun-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout build overlays
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Fetch Android TV Remote v2 base
+        run: |
+          git clone --depth 1 https://github.com/SebghatYusuf/android_remote.git caixun_remote
+          cp tvremote/tv_remote_screen.dart caixun_remote/lib/src/ui/tv_remote_screen.dart
+          cp tvremote/main.dart caixun_remote/lib/main.dart
+          cp tvremote/AndroidManifest.xml caixun_remote/android/app/src/main/AndroidManifest.xml
+
+      - name: Set app identity
+        working-directory: caixun_remote
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle.kts')
+          s = p.read_text()
+          s = s.replace('com.example.android_remote', 'cl.javix.caixunremote')
+          p.write_text(s)
+          q = Path('pubspec.yaml')
+          t = q.read_text().replace('description: "A new Flutter project."', 'description: "Control remoto Wi-Fi para Android TV, Google TV y televisores Caixun compatibles."')
+          q.write_text(t)
+          PY
+
+      - name: Install dependencies
+        working-directory: caixun_remote
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: caixun_remote
+        run: flutter build apk --release --build-name 1.0.0 --build-number 1
+
+      - name: Rename APK
+        run: cp caixun_remote/build/app/outputs/flutter-apk/app-release.apk Control_Remoto_Caixun_Universal_v1.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Control_Remoto_Caixun_Universal_v1
+          path: Control_Remoto_Caixun_Universal_v1.apk
+          if-no-files-found: error
+          retention-days: 7
