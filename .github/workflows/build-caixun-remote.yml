@@ -65,19 +65,132 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Fix Android application identity
+      - name: Add screen projection UI
+        working-directory: caixun_remote
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/src/ui/tv_remote_screen.dart')
+          s = p.read_text()
+          import_anchor = "import '../providers/settings_provider.dart';\n"
+          cast_helper = """
+
+const MethodChannel _castChannel = MethodChannel('cl.javix.caixunremote/cast');
+
+Future<void> _openCastSettings(BuildContext context) async {
+  try {
+    final result = await _castChannel.invokeMethod<String>('openCastSettings');
+    if (!context.mounted) return;
+    if (result == 'fallback') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tu teléfono no expone el selector directo de Cast. Se abrieron los ajustes inalámbricos.')),
+      );
+    }
+  } on PlatformException catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('No se pudo abrir Proyectar pantalla: ${e.message ?? 'error desconocido'}')),
+    );
+  }
+}
+"""
+          if '_castChannel' not in s:
+              if import_anchor not in s:
+                  raise SystemExit('Import anchor not found')
+              s = s.replace(import_anchor, import_anchor + cast_helper, 1)
+
+          remote_anchor = """        _Header(
+          title: widget.tv.name,
+          subtitle: 'Conectado',
+          connected: true,
+          onReconnect: n.resetAndScan,
+        ),
+        Expanded(
+"""
+          remote_replacement = """        _Header(
+          title: widget.tv.name,
+          subtitle: 'Conectado',
+          connected: true,
+          onReconnect: n.resetAndScan,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          child: SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _openCastSettings(context),
+              icon: const Icon(Icons.cast_connected_rounded),
+              label: const Text('PROYECTAR PANTALLA'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: C.accent,
+                side: const BorderSide(color: C.accent),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                textStyle: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: .6),
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+"""
+          if 'PROYECTAR PANTALLA' not in s:
+              if remote_anchor not in s:
+                  raise SystemExit('Remote UI anchor not found')
+              s = s.replace(remote_anchor, remote_replacement, 1)
+          p.write_text(s)
+          PY
+
+      - name: Fix Android application identity and add Cast launcher
         working-directory: caixun_remote
         run: |
           sed -i 's/com.example.android_remote/cl.javix.caixunremote/g' android/app/build.gradle.kts
-          sed -i 's/package com.example.android_remote/package cl.javix.caixunremote/' android/app/src/main/kotlin/com/example/android_remote/MainActivity.kt
           sed -i 's/gradle-8.13-bin.zip/gradle-8.14-bin.zip/' android/gradle/wrapper/gradle-wrapper.properties
+          cat > android/app/src/main/kotlin/com/example/android_remote/MainActivity.kt <<'KOTLIN'
+          package cl.javix.caixunremote
 
-      - name: Verify Android entry point
+          import android.content.ActivityNotFoundException
+          import android.content.Intent
+          import android.provider.Settings
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+
+          class MainActivity : FlutterActivity() {
+              private val channelName = "cl.javix.caixunremote/cast"
+
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
+                      if (call.method != "openCastSettings") {
+                          result.notImplemented()
+                          return@setMethodCallHandler
+                      }
+
+                      try {
+                          startActivity(Intent(Settings.ACTION_CAST_SETTINGS))
+                          result.success("cast")
+                      } catch (_: ActivityNotFoundException) {
+                          try {
+                              startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
+                              result.success("fallback")
+                          } catch (e: Exception) {
+                              result.error("CAST_SETTINGS_UNAVAILABLE", e.message, null)
+                          }
+                      } catch (e: Exception) {
+                          result.error("CAST_SETTINGS_ERROR", e.message, null)
+                      }
+                  }
+              }
+          }
+          KOTLIN
+
+      - name: Verify Android entry point and Cast bridge
         working-directory: caixun_remote
         run: |
           grep -q 'namespace = "cl.javix.caixunremote"' android/app/build.gradle.kts
           grep -q 'applicationId = "cl.javix.caixunremote"' android/app/build.gradle.kts
           grep -q 'package cl.javix.caixunremote' android/app/src/main/kotlin/com/example/android_remote/MainActivity.kt
+          grep -q 'ACTION_CAST_SETTINGS' android/app/src/main/kotlin/com/example/android_remote/MainActivity.kt
+          grep -q 'PROYECTAR PANTALLA' lib/src/ui/tv_remote_screen.dart
 
       - name: Install dependencies
         working-directory: caixun_remote
@@ -89,15 +202,15 @@ jobs:
 
       - name: Build release APK
         working-directory: caixun_remote
-        run: flutter build apk --release --build-name 1.1.0 --build-number 2
+        run: flutter build apk --release --build-name 1.2.0 --build-number 3
 
       - name: Rename APK
-        run: cp caixun_remote/build/app/outputs/flutter-apk/app-release.apk Control_Remoto_Caixun_Universal_v1.1.apk
+        run: cp caixun_remote/build/app/outputs/flutter-apk/app-release.apk Control_Remoto_Caixun_Universal_v1.2.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Control_Remoto_Caixun_Universal_v1.1
-          path: Control_Remoto_Caixun_Universal_v1.1.apk
+          name: Control_Remoto_Caixun_Universal_v1.2
+          path: Control_Remoto_Caixun_Universal_v1.2.apk
           if-no-files-found: error
           retention-days: 7
