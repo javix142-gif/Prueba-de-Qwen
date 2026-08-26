@@ -65,22 +65,57 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Set app identity and Gradle compatibility
+      - name: Set Android identity, activity and Gradle compatibility
         working-directory: caixun_remote
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('android/app/build.gradle.kts')
-          s = p.read_text()
+
+          gradle = Path('android/app/build.gradle.kts')
+          s = gradle.read_text()
           s = s.replace('com.example.android_remote', 'cl.javix.caixunremote')
-          p.write_text(s)
-          q = Path('pubspec.yaml')
-          t = q.read_text().replace('description: "A new Flutter project."', 'description: "Control remoto Wi-Fi para Android TV, Google TV y televisores Caixun compatibles."')
-          q.write_text(t)
-          g = Path('android/gradle/wrapper/gradle-wrapper.properties')
-          u = g.read_text().replace('gradle-8.13-bin.zip', 'gradle-8.14-bin.zip')
-          g.write_text(u)
+          gradle.write_text(s)
+
+          activity = Path('android/app/src/main/kotlin/com/example/android_remote/MainActivity.kt')
+          activity.write_text('''package cl.javix.caixunremote
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES), 1001)
+        }
+    }
+}
+''')
+
+          pubspec = Path('pubspec.yaml')
+          t = pubspec.read_text().replace(
+              'description: "A new Flutter project."',
+              'description: "Control remoto Wi-Fi para Android TV, Google TV y televisores Caixun compatibles."'
+          )
+          pubspec.write_text(t)
+
+          wrapper = Path('android/gradle/wrapper/gradle-wrapper.properties')
+          u = wrapper.read_text().replace('gradle-8.13-bin.zip', 'gradle-8.14-bin.zip')
+          wrapper.write_text(u)
           PY
+
+      - name: Verify Android entry point
+        working-directory: caixun_remote
+        run: |
+          grep -q 'namespace = "cl.javix.caixunremote"' android/app/build.gradle.kts
+          grep -q 'applicationId = "cl.javix.caixunremote"' android/app/build.gradle.kts
+          grep -q 'package cl.javix.caixunremote' android/app/src/main/kotlin/com/example/android_remote/MainActivity.kt
+          grep -q 'android:name=".MainActivity"' android/app/src/main/AndroidManifest.xml
 
       - name: Install dependencies
         working-directory: caixun_remote
@@ -92,15 +127,15 @@ jobs:
 
       - name: Build release APK
         working-directory: caixun_remote
-        run: flutter build apk --release --build-name 1.0.0 --build-number 1
+        run: flutter build apk --release --build-name 1.1.0 --build-number 2
 
       - name: Rename APK
-        run: cp caixun_remote/build/app/outputs/flutter-apk/app-release.apk Control_Remoto_Caixun_Universal_v1.apk
+        run: cp caixun_remote/build/app/outputs/flutter-apk/app-release.apk Control_Remoto_Caixun_Universal_v1.1.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Control_Remoto_Caixun_Universal_v1
-          path: Control_Remoto_Caixun_Universal_v1.apk
+          name: Control_Remoto_Caixun_Universal_v1.1
+          path: Control_Remoto_Caixun_Universal_v1.1.apk
           if-no-files-found: error
           retention-days: 7
