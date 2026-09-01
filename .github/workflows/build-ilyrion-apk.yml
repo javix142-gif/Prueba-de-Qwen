@@ -10,20 +10,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - name: Extract isolated project
+      - name: Reconstruct and verify isolated project
         run: |
+          cat ilyrion_bundle/part_* > /tmp/ilyrion.b64
+          echo "881344f4ebc81a61ff12239c32a2a8ed8767f1ee717c758b8bacce790a0361a6  /tmp/ilyrion.b64" | sha256sum -c -
+          base64 -d /tmp/ilyrion.b64 > /tmp/ilyrion.tar.gz
+          echo "28d37bfe5b52eb04c7f1cfe71a538a2fc9af57e165c16320a9b88971443226df  /tmp/ilyrion.tar.gz" | sha256sum -c -
           mkdir -p /tmp/ilyrion
-          base64 -d ilyrion_project.tar.gz.b64 | tar -xz -C /tmp/ilyrion
+          tar -xzf /tmp/ilyrion.tar.gz -C /tmp/ilyrion
       - name: Static game tests
         working-directory: /tmp/ilyrion
         run: |
           node --check app/src/main/assets/game.js
           node --test tests/static.test.mjs
+      - name: Install Android SDK 36
+        run: |
+          command -v sdkmanager
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Install Gradle 9.3.1
         run: |
           curl -fL --retry 3 -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
@@ -40,7 +49,7 @@ jobs:
           test -f "$APK"
           sha256sum "$APK" | tee APK_SHA256.txt
           ls -lh "$APK"
-          $ANDROID_HOME/build-tools/36.0.0/apksigner verify --verbose --print-certs "$APK" | tee APK_SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee APK_SIGNATURE.txt
           cp "$APK" Ilyrion-Las-Cinco-Luces-v1.0.0-debug.apk
       - uses: actions/upload-artifact@v4
         with:
