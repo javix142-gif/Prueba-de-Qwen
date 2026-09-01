@@ -22,6 +22,7 @@ jobs:
           echo "28d37bfe5b52eb04c7f1cfe71a538a2fc9af57e165c16320a9b88971443226df  /tmp/ilyrion.tar.gz" | sha256sum -c -
           mkdir -p /tmp/ilyrion
           tar -xzf /tmp/ilyrion.tar.gz -C /tmp/ilyrion
+          cp ilyrion_ci/MainActivity.java /tmp/ilyrion/app/src/main/java/cl/javix/ilyrion/MainActivity.java
       - name: Static game tests
         working-directory: /tmp/ilyrion
         run: |
@@ -38,7 +39,6 @@ jobs:
             find "$SDKROOT" -maxdepth 4 -type f \( -name sdkmanager -o -name apksigner \) -print || true
             exit 1
           fi
-          chmod +x "$SDKMANAGER" || true
           yes | "$SDKMANAGER" --sdk_root="$SDKROOT" --licenses >/dev/null || true
           "$SDKMANAGER" --sdk_root="$SDKROOT" "platforms;android-36" "build-tools;36.0.0"
           printf 'sdk.dir=%s\n' "$SDKROOT" > /tmp/ilyrion/local.properties
@@ -61,12 +61,12 @@ jobs:
           sha256sum "$APK" | tee APK_SHA256.txt
           ls -lh "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee APK_SIGNATURE.txt
-          cp "$APK" Ilyrion-Las-Cinco-Luces-v1.0.0-debug.apk
+          cp "$APK" Ilyrion-Las-Cinco-Luces-v1.0.1-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Ilyrion-Las-Cinco-Luces-v1.0.0
+          name: Ilyrion-Las-Cinco-Luces-v1.0.1
           path: |
-            Ilyrion-Las-Cinco-Luces-v1.0.0-debug.apk
+            Ilyrion-Las-Cinco-Luces-v1.0.1-debug.apk
             APK_SHA256.txt
             APK_SIGNATURE.txt
           retention-days: 30
