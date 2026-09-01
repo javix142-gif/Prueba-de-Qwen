@@ -17,9 +17,7 @@ jobs:
           java-version: '17'
       - name: Reconstruct and verify isolated project
         run: |
-          sha256sum ilyrion_bundle/part_*
           cat ilyrion_bundle/part_* > /tmp/ilyrion.b64
-          sha256sum /tmp/ilyrion.b64
           base64 -d /tmp/ilyrion.b64 > /tmp/ilyrion.tar.gz
           echo "28d37bfe5b52eb04c7f1cfe71a538a2fc9af57e165c16320a9b88971443226df  /tmp/ilyrion.tar.gz" | sha256sum -c -
           mkdir -p /tmp/ilyrion
@@ -29,11 +27,23 @@ jobs:
         run: |
           node --check app/src/main/assets/game.js
           node --test tests/static.test.mjs
-      - name: Install Android SDK 36
+      - name: Locate and prepare Android SDK 36
         run: |
-          command -v sdkmanager
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          SDKROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "Using SDK root: $SDKROOT"
+          test -d "$SDKROOT"
+          SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found under $SDKROOT" >&2
+            find "$SDKROOT" -maxdepth 4 -type f \( -name sdkmanager -o -name apksigner \) -print || true
+            exit 1
+          fi
+          chmod +x "$SDKMANAGER" || true
+          yes | "$SDKMANAGER" --sdk_root="$SDKROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDKROOT" "platforms;android-36" "build-tools;36.0.0"
+          printf 'sdk.dir=%s\n' "$SDKROOT" > /tmp/ilyrion/local.properties
+          echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDKROOT" >> "$GITHUB_ENV"
       - name: Install Gradle 9.3.1
         run: |
           curl -fL --retry 3 -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
