@@ -1,0 +1,83 @@
+name: Ilyrion Android 16 launch smoke
+on:
+  workflow_dispatch:
+  push:
+    branches: ["rpg-ilyrion-completo"]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Reconstruct project
+        run: |
+          cat ilyrion_bundle/part_* > /tmp/ilyrion.b64
+          base64 -d /tmp/ilyrion.b64 > /tmp/ilyrion.tar.gz
+          echo "28d37bfe5b52eb04c7f1cfe71a538a2fc9af57e165c16320a9b88971443226df  /tmp/ilyrion.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/ilyrion
+          tar -xzf /tmp/ilyrion.tar.gz -C /tmp/ilyrion
+          cat ilyrion_ui_bundle/part_* > /tmp/ilyrion_ui.b64
+          base64 -d /tmp/ilyrion_ui.b64 > /tmp/ilyrion_ui.tar.gz
+          echo "3fee031a8c57946ae361a271affb260c162d8a877a4c852c422c79bf5494efbb  /tmp/ilyrion_ui.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/ilyrion_ui.tar.gz -C /tmp/ilyrion
+          cp ilyrion_ci/MainActivity.java /tmp/ilyrion/app/src/main/java/cl/javix/ilyrion/MainActivity.java
+          cp ilyrion_ci/styles.xml /tmp/ilyrion/app/src/main/res/values/styles.xml
+          cp ilyrion_ci/AndroidManifest.xml /tmp/ilyrion/app/src/main/AndroidManifest.xml
+          mkdir -p /tmp/ilyrion/app/src/main/res/drawable /tmp/ilyrion/app/src/main/res/xml
+          cp ilyrion_ci/ic_launcher.xml /tmp/ilyrion/app/src/main/res/drawable/ic_launcher.xml
+          cp ilyrion_ci/data_extraction_rules.xml /tmp/ilyrion/app/src/main/res/xml/data_extraction_rules.xml
+      - name: Prepare SDK and build
+        run: |
+          SDKROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          yes | "$SDKMANAGER" --sdk_root="$SDKROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDKROOT" "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator" "system-images;android-36;default;x86_64"
+          printf 'sdk.dir=%s\n' "$SDKROOT" > /tmp/ilyrion/local.properties
+          curl -fL --retry 3 -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          /opt/gradle-9.3.1/bin/gradle -p /tmp/ilyrion :app:assembleDebug
+          echo "ANDROID_SDK_ROOT=$SDKROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
+      - name: Create AVD
+        run: |
+          echo no | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd -n ilyrion36 -k "system-images;android-36;default;x86_64" --force || \
+          echo no | "$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name avdmanager | head -n 1)" create avd -n ilyrion36 -k "system-images;android-36;default;x86_64" --force
+      - name: Boot emulator
+        run: |
+          nohup "$ANDROID_SDK_ROOT/emulator/emulator" -avd ilyrion36 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data -no-metrics >/tmp/emulator.log 2>&1 &
+          "$ANDROID_SDK_ROOT/platform-tools/adb" wait-for-device
+          for i in $(seq 1 120); do
+            BOOT=$("$ANDROID_SDK_ROOT/platform-tools/adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            [ "$BOOT" = "1" ] && break
+            sleep 2
+          done
+          "$ANDROID_SDK_ROOT/platform-tools/adb" shell getprop ro.build.version.release
+          "$ANDROID_SDK_ROOT/platform-tools/adb" shell getprop ro.build.version.sdk
+      - name: Install and launch APK
+        run: |
+          ADB="$ANDROID_SDK_ROOT/platform-tools/adb"
+          APK=/tmp/ilyrion/app/build/outputs/apk/debug/app-debug.apk
+          "$ADB" install -r "$APK"
+          "$ADB" logcat -c
+          "$ADB" shell am force-stop cl.javix.ilyrion
+          "$ADB" shell monkey -p cl.javix.ilyrion -c android.intent.category.LAUNCHER 1
+          sleep 8
+          echo '--- PROCESS ---'
+          "$ADB" shell pidof cl.javix.ilyrion || true
+          echo '--- RESUMED ACTIVITY ---'
+          "$ADB" shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|cl.javix.ilyrion' | head -30 || true
+          echo '--- ANDROIDRUNTIME ---'
+          "$ADB" logcat -d -v time AndroidRuntime:E '*:S' || true
+          echo '--- WEBVIEW/CRASH ERRORS ---'
+          "$ADB" logcat -d -v time | grep -E 'FATAL EXCEPTION|cl.javix.ilyrion|chromium|WebView' | tail -160 || true
+          test -n "$("$ADB" shell pidof cl.javix.ilyrion)"
+      - name: Emulator log on failure
+        if: failure()
+        run: |
+          tail -200 /tmp/emulator.log || true
