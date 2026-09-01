@@ -1,0 +1,65 @@
+name: Ilyrion stability candidate
+on:
+  push:
+    branches: ["rpg-ilyrion-completo"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Reconstruct project
+        run: |
+          cat ilyrion_bundle/part_* > /tmp/ilyrion.b64
+          base64 -d /tmp/ilyrion.b64 > /tmp/ilyrion.tar.gz
+          echo "28d37bfe5b52eb04c7f1cfe71a538a2fc9af57e165c16320a9b88971443226df  /tmp/ilyrion.tar.gz" | sha256sum -c -
+          mkdir -p /tmp/ilyrion
+          tar -xzf /tmp/ilyrion.tar.gz -C /tmp/ilyrion
+          cat ilyrion_ui_bundle/part_* > /tmp/ilyrion_ui.b64
+          base64 -d /tmp/ilyrion_ui.b64 > /tmp/ilyrion_ui.tar.gz
+          echo "3fee031a8c57946ae361a271affb260c162d8a877a4c852c422c79bf5494efbb  /tmp/ilyrion_ui.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/ilyrion_ui.tar.gz -C /tmp/ilyrion
+          cp ilyrion_ci/MainActivity_stability_candidate.java /tmp/ilyrion/app/src/main/java/cl/javix/ilyrion/MainActivity.java
+          cp ilyrion_ci/AndroidManifest_stability_candidate.xml /tmp/ilyrion/app/src/main/AndroidManifest.xml
+          cp ilyrion_ci/styles.xml /tmp/ilyrion/app/src/main/res/values/styles.xml
+          mkdir -p /tmp/ilyrion/app/src/main/res/drawable /tmp/ilyrion/app/src/main/res/xml
+          cp ilyrion_ci/ic_launcher.xml /tmp/ilyrion/app/src/main/res/drawable/ic_launcher.xml
+          cp ilyrion_ci/data_extraction_rules.xml /tmp/ilyrion/app/src/main/res/xml/data_extraction_rules.xml
+      - name: Static tests
+        working-directory: /tmp/ilyrion
+        run: |
+          node --check app/src/main/assets/game.js
+          node --test tests/static.test.mjs
+      - name: Prepare SDK and build
+        run: |
+          SDKROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          yes | "$SDKMANAGER" --sdk_root="$SDKROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDKROOT" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          printf 'sdk.dir=%s\n' "$SDKROOT" > /tmp/ilyrion/local.properties
+          curl -fL --retry 3 -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          /opt/gradle-9.3.1/bin/gradle -p /tmp/ilyrion :app:lintDebug :app:assembleDebug --stacktrace
+          echo "ANDROID_HOME=$SDKROOT" >> "$GITHUB_ENV"
+      - name: Verify APK
+        run: |
+          APK=/tmp/ilyrion/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          sha256sum "$APK" | tee APK_SHA256.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee APK_SIGNATURE.txt
+          cp "$APK" Ilyrion-Las-Cinco-Luces-v1.0.3-stability.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ilyrion-Las-Cinco-Luces-v1.0.3-stability
+          path: |
+            Ilyrion-Las-Cinco-Luces-v1.0.3-stability.apk
+            APK_SHA256.txt
+            APK_SIGNATURE.txt
+          retention-days: 30
