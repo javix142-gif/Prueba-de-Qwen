@@ -23,6 +23,7 @@ jobs:
           mkdir -p /tmp/ilyrion
           tar -xzf /tmp/ilyrion.tar.gz -C /tmp/ilyrion
           cp ilyrion_ci/MainActivity.java /tmp/ilyrion/app/src/main/java/cl/javix/ilyrion/MainActivity.java
+          cp ilyrion_ci/styles.xml /tmp/ilyrion/app/src/main/res/values/styles.xml
       - name: Static game tests
         working-directory: /tmp/ilyrion
         run: |
@@ -54,6 +55,7 @@ jobs:
         run: |
           gradle --version
           gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+          cat app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt || true
       - name: Verify APK
         run: |
           APK=/tmp/ilyrion/app/build/outputs/apk/debug/app-debug.apk
