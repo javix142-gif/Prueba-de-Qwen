@@ -22,6 +22,12 @@ jobs:
           echo "28d37bfe5b52eb04c7f1cfe71a538a2fc9af57e165c16320a9b88971443226df  /tmp/ilyrion.tar.gz" | sha256sum -c -
           mkdir -p /tmp/ilyrion
           tar -xzf /tmp/ilyrion.tar.gz -C /tmp/ilyrion
+
+          cat ilyrion_ui_bundle/part_* > /tmp/ilyrion_ui.b64
+          base64 -d /tmp/ilyrion_ui.b64 > /tmp/ilyrion_ui.tar.gz
+          echo "3fee031a8c57946ae361a271affb260c162d8a877a4c852c422c79bf5494efbb  /tmp/ilyrion_ui.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/ilyrion_ui.tar.gz -C /tmp/ilyrion
+
           cp ilyrion_ci/MainActivity.java /tmp/ilyrion/app/src/main/java/cl/javix/ilyrion/MainActivity.java
           cp ilyrion_ci/styles.xml /tmp/ilyrion/app/src/main/res/values/styles.xml
           cp ilyrion_ci/AndroidManifest.xml /tmp/ilyrion/app/src/main/AndroidManifest.xml
@@ -60,13 +66,12 @@ jobs:
           test -f "$APK"
           sha256sum "$APK" | tee APK_SHA256.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee APK_SIGNATURE.txt
-          cp "$APK" Ilyrion-Las-Cinco-Luces-debug.apk
+          cp "$APK" Ilyrion-Las-Cinco-Luces-v1.0.2-responsive.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Ilyrion-Las-Cinco-Luces-final
+          name: Ilyrion-Las-Cinco-Luces-v1.0.2-responsive
           path: |
-            Ilyrion-Las-Cinco-Luces-debug.apk
+            Ilyrion-Las-Cinco-Luces-v1.0.2-responsive.apk
             APK_SHA256.txt
             APK_SIGNATURE.txt
           retention-days: 30
-# Final validation build: launcher icon and Android 12+ backup rules included.
