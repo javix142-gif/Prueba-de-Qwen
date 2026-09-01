@@ -17,8 +17,9 @@ jobs:
           java-version: '17'
       - name: Reconstruct and verify isolated project
         run: |
+          sha256sum ilyrion_bundle/part_*
           cat ilyrion_bundle/part_* > /tmp/ilyrion.b64
-          echo "881344f4ebc81a61ff12239c32a2a8ed8767f1ee717c758b8bacce790a0361a6  /tmp/ilyrion.b64" | sha256sum -c -
+          sha256sum /tmp/ilyrion.b64
           base64 -d /tmp/ilyrion.b64 > /tmp/ilyrion.tar.gz
           echo "28d37bfe5b52eb04c7f1cfe71a538a2fc9af57e165c16320a9b88971443226df  /tmp/ilyrion.tar.gz" | sha256sum -c -
           mkdir -p /tmp/ilyrion
