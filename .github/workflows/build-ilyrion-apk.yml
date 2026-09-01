@@ -24,6 +24,10 @@ jobs:
           tar -xzf /tmp/ilyrion.tar.gz -C /tmp/ilyrion
           cp ilyrion_ci/MainActivity.java /tmp/ilyrion/app/src/main/java/cl/javix/ilyrion/MainActivity.java
           cp ilyrion_ci/styles.xml /tmp/ilyrion/app/src/main/res/values/styles.xml
+          cp ilyrion_ci/AndroidManifest.xml /tmp/ilyrion/app/src/main/AndroidManifest.xml
+          mkdir -p /tmp/ilyrion/app/src/main/res/drawable /tmp/ilyrion/app/src/main/res/xml
+          cp ilyrion_ci/ic_launcher.xml /tmp/ilyrion/app/src/main/res/drawable/ic_launcher.xml
+          cp ilyrion_ci/data_extraction_rules.xml /tmp/ilyrion/app/src/main/res/xml/data_extraction_rules.xml
       - name: Static game tests
         working-directory: /tmp/ilyrion
         run: |
@@ -32,14 +36,9 @@ jobs:
       - name: Locate and prepare Android SDK 36
         run: |
           SDKROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          echo "Using SDK root: $SDKROOT"
           test -d "$SDKROOT"
           SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -n 1)"
-          if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager not found under $SDKROOT" >&2
-            find "$SDKROOT" -maxdepth 4 -type f \( -name sdkmanager -o -name apksigner \) -print || true
-            exit 1
-          fi
+          test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --sdk_root="$SDKROOT" --licenses >/dev/null || true
           "$SDKMANAGER" --sdk_root="$SDKROOT" "platforms;android-36" "build-tools;36.0.0"
           printf 'sdk.dir=%s\n' "$SDKROOT" > /tmp/ilyrion/local.properties
@@ -53,7 +52,6 @@ jobs:
       - name: Android tests, lint and build
         working-directory: /tmp/ilyrion
         run: |
-          gradle --version
           gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
           cat app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt || true
       - name: Verify APK
@@ -61,14 +59,13 @@ jobs:
           APK=/tmp/ilyrion/app/build/outputs/apk/debug/app-debug.apk
           test -f "$APK"
           sha256sum "$APK" | tee APK_SHA256.txt
-          ls -lh "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee APK_SIGNATURE.txt
-          cp "$APK" Ilyrion-Las-Cinco-Luces-v1.0.1-debug.apk
+          cp "$APK" Ilyrion-Las-Cinco-Luces-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Ilyrion-Las-Cinco-Luces-v1.0.1
+          name: Ilyrion-Las-Cinco-Luces-final
           path: |
-            Ilyrion-Las-Cinco-Luces-v1.0.1-debug.apk
+            Ilyrion-Las-Cinco-Luces-debug.apk
             APK_SHA256.txt
             APK_SIGNATURE.txt
           retention-days: 30
