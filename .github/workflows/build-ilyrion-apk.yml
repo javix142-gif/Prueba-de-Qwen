@@ -69,3 +69,4 @@ jobs:
             APK_SHA256.txt
             APK_SIGNATURE.txt
           retention-days: 30
+# Final validation build: launcher icon and Android 12+ backup rules included.
