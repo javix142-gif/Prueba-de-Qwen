@@ -1,0 +1,93 @@
+name: Build Ilyrion v2 Final
+
+on:
+  push:
+    branches: ["rpg-ilyrion-v2-build"]
+    paths:
+      - "v2_payload/**"
+      - ".github/workflows/build-ilyrion-v2-final.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Reconstruct v2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ilyrion
+          cat v2_payload/part_* | base64 -d > /tmp/ilyrion.tar.xz
+          echo "506597d95b2afdd1dca8142bc4f33afffd3e5b956db47ad5fc0074a9db0723b6  /tmp/ilyrion.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/ilyrion.tar.xz -C /tmp/ilyrion
+          test -f /tmp/ilyrion/app/src/main/assets/index.html
+          test -f /tmp/ilyrion/tests/v2.test.mjs
+
+      - name: Static v2 tests
+        working-directory: /tmp/ilyrion
+        run: node --test tests/v2.test.mjs
+
+      - name: Prepare Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDKROOT" -type f -name sdkmanager | head -1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+          echo "sdk.dir=$SDKROOT" > /tmp/ilyrion/local.properties
+          echo "ANDROID_SDK_ROOT=$SDKROOT" >> "$GITHUB_ENV"
+
+      - name: Install Gradle 9.3.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo '/opt/gradle-9.3.1/bin' >> "$GITHUB_PATH"
+
+      - name: Android tests, lint and build
+        working-directory: /tmp/ilyrion
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+
+      - name: Print lint report
+        if: always()
+        working-directory: /tmp/ilyrion
+        shell: bash
+        run: |
+          find app/build -iname 'lint-results*.txt' -print -exec cat {} \; 2>/dev/null || true
+
+      - name: Verify APK signature and hash
+        working-directory: /tmp/ilyrion
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          sha256sum "$APK" | tee APK_SHA256.txt
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee APK_SIGNATURE.txt
+          cp "$APK" Ilyrion-Las-Cinco-Luces-v2.0.0.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ilyrion-Las-Cinco-Luces-v2.0.0
+          path: |
+            /tmp/ilyrion/Ilyrion-Las-Cinco-Luces-v2.0.0.apk
+            /tmp/ilyrion/APK_SHA256.txt
+            /tmp/ilyrion/APK_SIGNATURE.txt
+          retention-days: 30
