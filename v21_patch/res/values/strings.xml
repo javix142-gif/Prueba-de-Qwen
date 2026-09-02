@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="startup_error">Ilyrion no pudo iniciar.\n\nError: %1$s\n\nEnvía una captura de esta pantalla para identificar el fallo exacto.</string>
+</resources>
