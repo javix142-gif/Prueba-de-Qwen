@@ -23,10 +23,14 @@ jobs:
         run: |
           set -euo pipefail
           test "$(wc -c < v21_corrective_parts/part_09)" -eq 18000
-          test "$(wc -c < v21_corrective_parts/part_10)" -eq 18000
+          test "$(wc -c < v21_corrective_parts/part_10a)" -eq 9000
+          test "$(wc -c < v21_corrective_parts/part_10b)" -eq 9000
           test "$(wc -c < v21_corrective_parts/part_11)" -eq 4560
           echo "c1273148f7879f99ae9a4bfa60d89e194b424ee937c8747baed483df4638f033  v21_corrective_parts/part_09" | sha256sum -c -
-          echo "f080ea1bcffcc4dd047dc64a0a78612b28ca732c7a7fde74457f9369522a184e  v21_corrective_parts/part_10" | sha256sum -c -
+          echo "0c7ff4f95007c85db5e6ee21e4d6a671b1fe10b3414c682fae19629c8acd403a  v21_corrective_parts/part_10a" | sha256sum -c -
+          echo "c07413c0a18a72b8b51dcc2b20fcc79e0d668e3b10c07450352b94c8e76b6091  v21_corrective_parts/part_10b" | sha256sum -c -
+          cat v21_corrective_parts/part_10a v21_corrective_parts/part_10b > /tmp/part_10
+          echo "f080ea1bcffcc4dd047dc64a0a78612b28ca732c7a7fde74457f9369522a184e  /tmp/part_10" | sha256sum -c -
           echo "1278b93571e04f89ce6db11808d205e6c0f60ae8cd277455058314c70f99dfc4  v21_corrective_parts/part_11" | sha256sum -c -
 
       - name: Reconstruct corrective and require XZ and patch SHA-256
@@ -38,7 +42,7 @@ jobs:
           cat v21_corrective_parts/part_00_tail >> /tmp/v21-corrective.b64
           cat v21_corrective_parts/part_01 v21_corrective_parts/part_02 v21_corrective_parts/part_03 v21_corrective_parts/part_04 v21_corrective_parts/part_05 v21_corrective_parts/part_06 v21_corrective_parts/part_07 >> /tmp/v21-corrective.b64
           head -c 18000 v21_corrective_parts/part_08 >> /tmp/v21-corrective.b64
-          cat v21_corrective_parts/part_09 v21_corrective_parts/part_10 v21_corrective_parts/part_11 >> /tmp/v21-corrective.b64
+          cat v21_corrective_parts/part_09 /tmp/part_10 v21_corrective_parts/part_11 >> /tmp/v21-corrective.b64
           test "$(wc -c < /tmp/v21-corrective.b64)" -eq 186560
           base64 -d /tmp/v21-corrective.b64 > /tmp/v21-corrective.patch.xz
           echo "54d5868998608b50a75f8694a0f3bb318d94e159c2b15a72b82307b9b7bd5f2a  /tmp/v21-corrective.patch.xz" | sha256sum -c -
