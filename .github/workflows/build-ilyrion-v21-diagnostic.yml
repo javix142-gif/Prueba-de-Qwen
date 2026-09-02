@@ -1,0 +1,41 @@
+name: Build Ilyrion v2.1 Patched Runtime Diagnostic
+
+on:
+  push:
+    branches: ["rpg-ilyrion-v21-build"]
+    paths:
+      - ".github/workflows/build-ilyrion-v21-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Reconstruct base and apply transported patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ilyrion
+          cat v2_payload/part_* | base64 -d > /tmp/ilyrion.tar.xz
+          echo "506597d95b2afdd1dca8142bc4f33afffd3e5b956db47ad5fc0074a9db0723b6  /tmp/ilyrion.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/ilyrion.tar.xz -C /tmp/ilyrion
+          cat v21_patch_parts/part_* | base64 -d > /tmp/v21.patch.xz
+          echo "fe3ed59f2286a71902f62e6b00c83eebd8405decd61e152c366d497c7ddba963  /tmp/v21.patch.xz" | sha256sum -c -
+          xz -dc /tmp/v21.patch.xz > /tmp/v21.patch
+          echo "50250c346f65c63d0fdcff6f45e390c646fa4e9546c908627ffcfd5526839d73  /tmp/v21.patch" | sha256sum -c -
+          cd /tmp/ilyrion
+          patch --batch --forward app/src/main/assets/index.html < /tmp/v21.patch
+          sha256sum app/src/main/assets/index.html | tee PATCHED_SHA256.txt
+          cp app/src/main/assets/index.html /tmp/patched-index.html
+      - name: Upload patched runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: v21-patched-runtime-diagnostic
+          path: |
+            /tmp/patched-index.html
+            /tmp/ilyrion/PATCHED_SHA256.txt
+          retention-days: 3
