@@ -1,0 +1,116 @@
+name: Build Ilyrion v2.1 Final
+
+on:
+  push:
+    branches: ["rpg-ilyrion-v21-build"]
+    paths:
+      - "v21_payload.tar.xz"
+      - ".github/workflows/build-ilyrion-v21-final.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Reconstruct exact v2.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ilyrion
+          echo "86e3b39d2025a4e5497e1f39d7242e64162b7935a16c991a19023fa08675230e  v21_payload.tar.xz" | sha256sum -c -
+          tar -xJf v21_payload.tar.xz -C /tmp/ilyrion
+          test -f /tmp/ilyrion/app/src/main/assets/index.html
+          test -f /tmp/ilyrion/tests/v21.test.mjs
+
+      - name: Generate local offline audio
+        working-directory: /tmp/ilyrion
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+          chmod +x ./tools/generate_audio.sh
+          ./tools/generate_audio.sh
+          test -f app/src/main/assets/audio/boss.ogg
+          test -f app/src/main/assets/audio/hit.ogg
+
+      - name: JS syntax and 32 static tests
+        working-directory: /tmp/ilyrion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('app/src/main/assets/index.html').read_text()
+          Path('/tmp/all-v21.js').write_text('\n'.join(re.findall(r'<script[^>]*>(.*?)</script>',t,re.S)))
+          PY
+          node --check /tmp/all-v21.js
+          node --test tests/v21.test.mjs
+
+      - name: Prepare Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDKROOT" -type f -name sdkmanager | head -1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+          echo "sdk.dir=$SDKROOT" > /tmp/ilyrion/local.properties
+          echo "ANDROID_SDK_ROOT=$SDKROOT" >> "$GITHUB_ENV"
+
+      - name: Install Gradle 9.3.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo '/opt/gradle-9.3.1/bin' >> "$GITHUB_PATH"
+
+      - name: Android unit tests, lint and build
+        working-directory: /tmp/ilyrion
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+
+      - name: Print lint report
+        if: always()
+        working-directory: /tmp/ilyrion
+        shell: bash
+        run: |
+          find app/build -iname 'lint-results*.txt' -print -exec cat {} \; 2>/dev/null || true
+
+      - name: Verify APK signature and hashes
+        working-directory: /tmp/ilyrion
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          sha256sum "$APK" | tee APK_SHA256.txt
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee APK_SIGNATURE.txt
+          cp "$APK" Ilyrion-Las-Cinco-Luces-v2.1.0.apk
+          sha256sum app/src/main/assets/index.html | tee RUNTIME_SHA256.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ilyrion-Las-Cinco-Luces-v2.1.0
+          path: |
+            /tmp/ilyrion/Ilyrion-Las-Cinco-Luces-v2.1.0.apk
+            /tmp/ilyrion/APK_SHA256.txt
+            /tmp/ilyrion/APK_SIGNATURE.txt
+            /tmp/ilyrion/RUNTIME_SHA256.txt
+            /tmp/ilyrion/QA_V21.md
+          retention-days: 30
