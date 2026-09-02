@@ -5,6 +5,7 @@ on:
     branches: ["rpg-ilyrion-v21-build"]
     paths:
       - "v21_patch/**"
+      - "v21_patch_parts/**"
       - ".github/workflows/build-ilyrion-v21-patch.yml"
   workflow_dispatch:
 
@@ -42,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base64 -d v21_patch/html.patch.xz.b64 > /tmp/v21.patch.xz
+          cat v21_patch_parts/part_* | base64 -d > /tmp/v21.patch.xz
           echo "fe3ed59f2286a71902f62e6b00c83eebd8405decd61e152c366d497c7ddba963  /tmp/v21.patch.xz" | sha256sum -c -
           xz -dc /tmp/v21.patch.xz > /tmp/v21.patch
           echo "50250c346f65c63d0fdcff6f45e390c646fa4e9546c908627ffcfd5526839d73  /tmp/v21.patch" | sha256sum -c -
