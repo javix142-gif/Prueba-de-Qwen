@@ -1,0 +1,158 @@
+name: Build Ilyrion v2.1 Verified Final
+
+on:
+  push:
+    branches: ["rpg-ilyrion-v21-final-build"]
+    paths:
+      - ".github/workflows/build-ilyrion-v21-verified-final.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Reconstruct verified v2.1 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ilyrion
+
+          cat v2_payload/part_* | base64 -d > /tmp/ilyrion.tar.xz
+          echo "506597d95b2afdd1dca8142bc4f33afffd3e5b956db47ad5fc0074a9db0723b6  /tmp/ilyrion.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/ilyrion.tar.xz -C /tmp/ilyrion
+
+          cat v21_patch_parts/part_* | base64 -d > /tmp/v21.patch.xz
+          echo "fe3ed59f2286a71902f62e6b00c83eebd8405decd61e152c366d497c7ddba963  /tmp/v21.patch.xz" | sha256sum -c -
+          xz -dc /tmp/v21.patch.xz > /tmp/v21.patch
+          echo "50250c346f65c63d0fdcff6f45e390c646fa4e9546c908627ffcfd5526839d73  /tmp/v21.patch" | sha256sum -c -
+          cd /tmp/ilyrion
+          patch --batch --forward app/src/main/assets/index.html < /tmp/v21.patch
+
+          head -c 9000 "$GITHUB_WORKSPACE/v21_corrective_parts/part_09" > /tmp/part_09a
+          cat "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s00 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s01 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s02 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s03 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s04 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s05 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s06 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s07 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s08 > /tmp/part_09b
+          cat /tmp/part_09a /tmp/part_09b > /tmp/part_09
+          echo "c1273148f7879f99ae9a4bfa60d89e194b424ee937c8747baed483df4638f033  /tmp/part_09" | sha256sum -c -
+          cat "$GITHUB_WORKSPACE/v21_corrective_parts/part_10a" "$GITHUB_WORKSPACE/v21_corrective_parts/part_10b" > /tmp/part_10
+          echo "f080ea1bcffcc4dd047dc64a0a78612b28ca732c7a7fde74457f9369522a184e  /tmp/part_10" | sha256sum -c -
+
+          : > /tmp/v21-corrective.b64
+          cat "$GITHUB_WORKSPACE/v21_corrective_parts/part_00" >> /tmp/v21-corrective.b64
+          cat "$GITHUB_WORKSPACE/v21_corrective_parts/part_00_tail" >> /tmp/v21-corrective.b64
+          cat "$GITHUB_WORKSPACE"/v21_corrective_parts/part_01 "$GITHUB_WORKSPACE"/v21_corrective_parts/part_02 "$GITHUB_WORKSPACE"/v21_corrective_parts/part_03 "$GITHUB_WORKSPACE"/v21_corrective_parts/part_04 "$GITHUB_WORKSPACE"/v21_corrective_parts/part_05 "$GITHUB_WORKSPACE"/v21_corrective_parts/part_06 "$GITHUB_WORKSPACE"/v21_corrective_parts/part_07 >> /tmp/v21-corrective.b64
+          head -c 18000 "$GITHUB_WORKSPACE/v21_corrective_parts/part_08" >> /tmp/v21-corrective.b64
+          cat /tmp/part_09 /tmp/part_10 "$GITHUB_WORKSPACE/v21_corrective_parts/part_11" >> /tmp/v21-corrective.b64
+          test "$(wc -c < /tmp/v21-corrective.b64)" -eq 186560
+          base64 -d /tmp/v21-corrective.b64 > /tmp/v21-corrective.patch.xz
+          echo "54d5868998608b50a75f8694a0f3bb318d94e159c2b15a72b82307b9b7bd5f2a  /tmp/v21-corrective.patch.xz" | sha256sum -c -
+          xz -dc /tmp/v21-corrective.patch.xz > /tmp/v21-corrective.patch
+          echo "ea9853031dd60c5480ae16a1fbce772b432fc072b7af9fa78007ba991afc1377  /tmp/v21-corrective.patch" | sha256sum -c -
+          patch --batch --forward app/src/main/assets/index.html < /tmp/v21-corrective.patch
+          echo "12959c81bde1088350cd6139ba85acee945008667ad663f6697f564b975a6ad5  app/src/main/assets/index.html" | sha256sum -c -
+
+      - name: Apply and verify Android v2.1 files
+        shell: bash
+        working-directory: /tmp/ilyrion
+        run: |
+          set -euo pipefail
+          cp "$GITHUB_WORKSPACE/v21_patch/MainActivity.java" app/src/main/java/cl/javix/ilyrion/MainActivity.java
+          cp "$GITHUB_WORKSPACE/v21_patch/AndroidManifest.xml" app/src/main/AndroidManifest.xml
+          cp "$GITHUB_WORKSPACE/v21_patch/app-build.gradle" app/build.gradle
+          cp "$GITHUB_WORKSPACE/v21_patch/v21.test.mjs" tests/v21.test.mjs
+          echo "93cb47b69211c9b0f4821e6f893db7b4cbb435b636f796a1f0bfa709f3ec2a66  app/src/main/java/cl/javix/ilyrion/MainActivity.java" | sha256sum -c -
+          echo "4af2605907730c71951ced1af2e1b00f9092169d8ef91e8845fa56866aa7c0d4  app/src/main/AndroidManifest.xml" | sha256sum -c -
+          echo "ac6ff0183d769486c32486edff5c09c889f6a9da9462bde2ed45a8e21c07a86a  app/build.gradle" | sha256sum -c -
+          echo "74bb93dc5f758db8cc43405f0c4e50442de15a815e1d8da60f55e19f8b5dff54  tests/v21.test.mjs" | sha256sum -c -
+
+      - name: Generate local offline audio
+        shell: bash
+        working-directory: /tmp/ilyrion
+        run: |
+          set -euo pipefail
+          command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+          chmod +x tools/generate_audio.sh
+          ./tools/generate_audio.sh
+          test -f app/src/main/assets/audio/boss.ogg
+          test -f app/src/main/assets/audio/hit.ogg
+
+      - name: JS syntax and 32 tests
+        shell: bash
+        working-directory: /tmp/ilyrion
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          t=Path('app/src/main/assets/index.html').read_text()
+          Path('/tmp/all-v21.js').write_text('\n'.join(re.findall(r'<script[^>]*>(.*?)</script>',t,re.S)))
+          PY
+          node --check /tmp/all-v21.js
+          node --test tests/v21.test.mjs
+
+      - name: Prepare Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDKROOT" -type f -name sdkmanager | head -1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+          echo "sdk.dir=$SDKROOT" > /tmp/ilyrion/local.properties
+          echo "ANDROID_SDK_ROOT=$SDKROOT" >> "$GITHUB_ENV"
+
+      - name: Install Gradle 9.3.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo '/opt/gradle-9.3.1/bin' >> "$GITHUB_PATH"
+
+      - name: Android testDebugUnitTest lintDebug assembleDebug
+        working-directory: /tmp/ilyrion
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+
+      - name: Save lint report
+        if: always()
+        working-directory: /tmp/ilyrion
+        shell: bash
+        run: |
+          find app/build -iname 'lint-results*.txt' -print -exec cat {} \; 2>/dev/null | tee LINT_REPORT.txt || true
+
+      - name: Verify APK signature and SHA-256
+        working-directory: /tmp/ilyrion
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" | tee APK_SIGNATURE.txt
+          sha256sum "$APK" | tee APK_SHA256.txt
+          echo "12959c81bde1088350cd6139ba85acee945008667ad663f6697f564b975a6ad5  app/src/main/assets/index.html" | sha256sum -c -
+          sha256sum app/src/main/assets/index.html | tee RUNTIME_SHA256.txt
+          cp "$APK" Ilyrion-Las-Cinco-Luces-v2.1.0.apk
+
+      - name: Upload validated APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ilyrion-Las-Cinco-Luces-v2.1.0-VALIDATED
+          path: |
+            /tmp/ilyrion/Ilyrion-Las-Cinco-Luces-v2.1.0.apk
+            /tmp/ilyrion/APK_SHA256.txt
+            /tmp/ilyrion/APK_SIGNATURE.txt
+            /tmp/ilyrion/RUNTIME_SHA256.txt
+            /tmp/ilyrion/LINT_REPORT.txt
+          retention-days: 30
