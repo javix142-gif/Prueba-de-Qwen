@@ -33,11 +33,12 @@ jobs:
           cat v2_payload/part_* | base64 -d > /tmp/ilyrion.tar.xz
           echo "506597d95b2afdd1dca8142bc4f33afffd3e5b956db47ad5fc0074a9db0723b6  /tmp/ilyrion.tar.xz" | sha256sum -c -
           tar -xJf /tmp/ilyrion.tar.xz -C /tmp/ilyrion
+          test -f /tmp/ilyrion/app/src/main/assets/index.html
+          test -f /tmp/ilyrion/app/src/main/java/cl/javix/ilyrion/MainActivity.java
+          test -f /tmp/ilyrion/app/src/main/AndroidManifest.xml
           sha256sum /tmp/ilyrion/app/src/main/assets/index.html
-          echo "93cb47b69211c9b0f4821e6f893db7b4cbb435b636f796a1f0bfa709f3ec2a66  /tmp/ilyrion/app/src/main/java/cl/javix/ilyrion/MainActivity.java" | sha256sum -c -
-          echo "4af2605907730c71951ced1af2e1b00f9092169d8ef91e8845fa56866aa7c0d4  /tmp/ilyrion/app/src/main/AndroidManifest.xml" | sha256sum -c -
 
-      - name: Transport and apply exact v2.1 patch
+      - name: Transport and apply exact v2.1 payload
         shell: bash
         run: |
           set -euo pipefail
@@ -47,12 +48,14 @@ jobs:
           echo "50250c346f65c63d0fdcff6f45e390c646fa4e9546c908627ffcfd5526839d73  /tmp/v21.patch" | sha256sum -c -
           cd /tmp/ilyrion
           patch --batch --forward app/src/main/assets/index.html < /tmp/v21.patch
-          echo "12959c81bde1088350cd6139ba85acee945008667ad663f6697f564b975a6ad5  app/src/main/assets/index.html" | sha256sum -c -
-          sed -i "s/versionCode 20/versionCode 21/" app/build.gradle
-          sed -i "s/versionName '2.0.0'/versionName '2.1.0'/" app/build.gradle
-          grep -q "versionCode 21" app/build.gradle
-          grep -q "versionName '2.1.0'" app/build.gradle
+          cp "$GITHUB_WORKSPACE/v21_patch/MainActivity.java" app/src/main/java/cl/javix/ilyrion/MainActivity.java
+          cp "$GITHUB_WORKSPACE/v21_patch/AndroidManifest.xml" app/src/main/AndroidManifest.xml
+          cp "$GITHUB_WORKSPACE/v21_patch/app-build.gradle" app/build.gradle
           cp "$GITHUB_WORKSPACE/v21_patch/v21.test.mjs" tests/v21.test.mjs
+          echo "12959c81bde1088350cd6139ba85acee945008667ad663f6697f564b975a6ad5  app/src/main/assets/index.html" | sha256sum -c -
+          echo "93cb47b69211c9b0f4821e6f893db7b4cbb435b636f796a1f0bfa709f3ec2a66  app/src/main/java/cl/javix/ilyrion/MainActivity.java" | sha256sum -c -
+          echo "4af2605907730c71951ced1af2e1b00f9092169d8ef91e8845fa56866aa7c0d4  app/src/main/AndroidManifest.xml" | sha256sum -c -
+          echo "ac6ff0183d769486c32486edff5c09c889f6a9da9462bde2ed45a8e21c07a86a  app/build.gradle" | sha256sum -c -
           echo "74bb93dc5f758db8cc43405f0c4e50442de15a815e1d8da60f55e19f8b5dff54  tests/v21.test.mjs" | sha256sum -c -
 
       - name: Expanded static suite
