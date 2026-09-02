@@ -58,19 +58,28 @@ jobs:
           patch --batch --forward app/src/main/assets/index.html < /tmp/v21-corrective.patch
           echo "12959c81bde1088350cd6139ba85acee945008667ad663f6697f564b975a6ad5  app/src/main/assets/index.html" | sha256sum -c -
 
-      - name: Apply and verify Android v2.1 files
+      - name: Apply and verify exact Android v2.1 files
         shell: bash
         working-directory: /tmp/ilyrion
         run: |
           set -euo pipefail
+          mkdir -p app/src/main/res/values app/src/main/res/drawable app/src/main/res/xml
           cp "$GITHUB_WORKSPACE/v21_patch/MainActivity.java" app/src/main/java/cl/javix/ilyrion/MainActivity.java
           cp "$GITHUB_WORKSPACE/v21_patch/AndroidManifest.xml" app/src/main/AndroidManifest.xml
           cp "$GITHUB_WORKSPACE/v21_patch/app-build.gradle" app/build.gradle
           cp "$GITHUB_WORKSPACE/v21_patch/v21.test.mjs" tests/v21.test.mjs
+          cp "$GITHUB_WORKSPACE/v21_patch/res/values/strings.xml" app/src/main/res/values/strings.xml
+          cp "$GITHUB_WORKSPACE/v21_patch/res/values/styles.xml" app/src/main/res/values/styles.xml
+          cp "$GITHUB_WORKSPACE/v21_patch/res/drawable/ic_launcher.xml" app/src/main/res/drawable/ic_launcher.xml
+          cp "$GITHUB_WORKSPACE/v21_patch/res/xml/data_extraction_rules.xml" app/src/main/res/xml/data_extraction_rules.xml
           echo "93cb47b69211c9b0f4821e6f893db7b4cbb435b636f796a1f0bfa709f3ec2a66  app/src/main/java/cl/javix/ilyrion/MainActivity.java" | sha256sum -c -
           echo "4af2605907730c71951ced1af2e1b00f9092169d8ef91e8845fa56866aa7c0d4  app/src/main/AndroidManifest.xml" | sha256sum -c -
           echo "ac6ff0183d769486c32486edff5c09c889f6a9da9462bde2ed45a8e21c07a86a  app/build.gradle" | sha256sum -c -
           echo "74bb93dc5f758db8cc43405f0c4e50442de15a815e1d8da60f55e19f8b5dff54  tests/v21.test.mjs" | sha256sum -c -
+          echo "bcae69a75082f7b6112eb542b02fc0a6d061b98379e40ff08fd53dd8f66c4c0a  app/src/main/res/values/strings.xml" | sha256sum -c -
+          echo "c2ce1bc24f40e971a41798b10e6f4e58691f59845790e24f82748ef813561484  app/src/main/res/values/styles.xml" | sha256sum -c -
+          echo "b6109e7270c3f4ae135a28948955dd1cadc8ef42db2ccd4f8a229f173eeabfbb  app/src/main/res/drawable/ic_launcher.xml" | sha256sum -c -
+          echo "eda9dddce1e895de1efd716fe75e244187bf8f91a3bb7444c6ea1731e51c74a8  app/src/main/res/xml/data_extraction_rules.xml" | sha256sum -c -
 
       - name: Generate local offline audio
         shell: bash
