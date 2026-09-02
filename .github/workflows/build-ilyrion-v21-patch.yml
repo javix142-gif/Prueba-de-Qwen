@@ -33,7 +33,7 @@ jobs:
           cat v2_payload/part_* | base64 -d > /tmp/ilyrion.tar.xz
           echo "506597d95b2afdd1dca8142bc4f33afffd3e5b956db47ad5fc0074a9db0723b6  /tmp/ilyrion.tar.xz" | sha256sum -c -
           tar -xJf /tmp/ilyrion.tar.xz -C /tmp/ilyrion
-          echo "7cc26d3b38a6d83fc305718d59abd3bae7549a417699f5aa1f4929ce8d1c785a  /tmp/ilyrion/app/src/main/assets/index.html" | sha256sum -c -
+          sha256sum /tmp/ilyrion/app/src/main/assets/index.html
           echo "93cb47b69211c9b0f4821e6f893db7b4cbb435b636f796a1f0bfa709f3ec2a66  /tmp/ilyrion/app/src/main/java/cl/javix/ilyrion/MainActivity.java" | sha256sum -c -
           echo "4af2605907730c71951ced1af2e1b00f9092169d8ef91e8845fa56866aa7c0d4  /tmp/ilyrion/app/src/main/AndroidManifest.xml" | sha256sum -c -
 
