@@ -23,16 +23,22 @@ jobs:
         run: |
           set -euo pipefail
           test "$(wc -c < v21_corrective_parts/part_09)" -eq 18000
-          test "$(wc -c < v21_corrective_parts/part_09b0)" -eq 4500
-          test "$(wc -c < v21_corrective_parts/part_09b1)" -eq 4500
+          for i in 00 01 02 03 04 05 06 07 08; do test "$(wc -c < v21_corrective_parts/p09s$i)" -eq 1000; done
           test "$(wc -c < v21_corrective_parts/part_10a)" -eq 9000
           test "$(wc -c < v21_corrective_parts/part_10b)" -eq 9000
           test "$(wc -c < v21_corrective_parts/part_11)" -eq 4560
           head -c 9000 v21_corrective_parts/part_09 > /tmp/part_09a
           echo "f36c122fc3096d309b71b91c888cb9708ff6f34f579e8742ae0f24673293be6d  /tmp/part_09a" | sha256sum -c -
-          echo "4c968bcfe86e8f33f47a74a37219c3abe9f648262ab72995af7ae86cbf4aad90  v21_corrective_parts/part_09b0" | sha256sum -c -
-          echo "fa2b97629abc1f03c178c681a5cd531aa521705fa02cfe7fccb22793dbf51aba  v21_corrective_parts/part_09b1" | sha256sum -c -
-          cat v21_corrective_parts/part_09b0 v21_corrective_parts/part_09b1 > /tmp/part_09b
+          echo "a3fc20df7aa53f736eb1c4ed2db69cdd85034e290356963c3d4e13993ed587b0  v21_corrective_parts/p09s00" | sha256sum -c -
+          echo "e0231e8bdacf85e793cc5d254ef2b05206d67397308c3f59fbbd1e277c138cec  v21_corrective_parts/p09s01" | sha256sum -c -
+          echo "2e8485434581dc16b8ef0d5b952693e41f424f982da48de98ef713697319a500  v21_corrective_parts/p09s02" | sha256sum -c -
+          echo "cbd488b0533f318fbd0bf40ec3e298c2ecaf06981bd732553e76b49755da9d37  v21_corrective_parts/p09s03" | sha256sum -c -
+          echo "1a76723a35e4b7a582bca4a6c7e1d33e4cf2e8bee83579c102d6595245713129  v21_corrective_parts/p09s04" | sha256sum -c -
+          echo "cb99b8ee7cf853750b5efb2f92f5c4447e512f27584508e1ce7caf45b223058c  v21_corrective_parts/p09s05" | sha256sum -c -
+          echo "615b287e37e652da9014405ffe9d20049eb7f74abcf0beaeb2f8e659de79f01b  v21_corrective_parts/p09s06" | sha256sum -c -
+          echo "de9465ddea4640370c19b616f77cfca9ad50fc89a42c0c9c826bea5ea9e8c775  v21_corrective_parts/p09s07" | sha256sum -c -
+          echo "a1f66b393b7eaeb37373f2b24a9e9f6652bb5251af7681e7679688621d2a5b4c  v21_corrective_parts/p09s08" | sha256sum -c -
+          cat v21_corrective_parts/p09s00 v21_corrective_parts/p09s01 v21_corrective_parts/p09s02 v21_corrective_parts/p09s03 v21_corrective_parts/p09s04 v21_corrective_parts/p09s05 v21_corrective_parts/p09s06 v21_corrective_parts/p09s07 v21_corrective_parts/p09s08 > /tmp/part_09b
           echo "ac29512ada8eb253ef7d8969d1ff2a2bc1859a77c8dd53abee960f83601ac5ec  /tmp/part_09b" | sha256sum -c -
           cat /tmp/part_09a /tmp/part_09b > /tmp/part_09
           echo "c1273148f7879f99ae9a4bfa60d89e194b424ee937c8747baed483df4638f033  /tmp/part_09" | sha256sum -c -
