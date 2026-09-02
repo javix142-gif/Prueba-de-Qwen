@@ -1,0 +1,32 @@
+name: Export v2.1 corrective prefix
+
+on:
+  push:
+    branches: ["rpg-ilyrion-v21-build"]
+    paths:
+      - ".github/workflows/export-v21-corrective-prefix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Export exact transported prefix
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -l v21_corrective_parts
+          cat v21_corrective_parts/part_00 v21_corrective_parts/part_01 v21_corrective_parts/part_02 v21_corrective_parts/part_03 v21_corrective_parts/part_04 v21_corrective_parts/part_05 v21_corrective_parts/part_06 v21_corrective_parts/part_07 v21_corrective_parts/part_08 > corrective-prefix.b64
+          wc -c corrective-prefix.b64
+          sha256sum corrective-prefix.b64 > corrective-prefix.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v21-corrective-prefix
+          path: |
+            corrective-prefix.b64
+            corrective-prefix.sha256
+          retention-days: 3
