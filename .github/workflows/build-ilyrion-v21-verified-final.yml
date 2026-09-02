@@ -29,25 +29,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/ilyrion
-
           cat v2_payload/part_* | base64 -d > /tmp/ilyrion.tar.xz
           echo "506597d95b2afdd1dca8142bc4f33afffd3e5b956db47ad5fc0074a9db0723b6  /tmp/ilyrion.tar.xz" | sha256sum -c -
           tar -xJf /tmp/ilyrion.tar.xz -C /tmp/ilyrion
-
           cat v21_patch_parts/part_* | base64 -d > /tmp/v21.patch.xz
           echo "fe3ed59f2286a71902f62e6b00c83eebd8405decd61e152c366d497c7ddba963  /tmp/v21.patch.xz" | sha256sum -c -
           xz -dc /tmp/v21.patch.xz > /tmp/v21.patch
           echo "50250c346f65c63d0fdcff6f45e390c646fa4e9546c908627ffcfd5526839d73  /tmp/v21.patch" | sha256sum -c -
           cd /tmp/ilyrion
           patch --batch --forward app/src/main/assets/index.html < /tmp/v21.patch
-
           head -c 9000 "$GITHUB_WORKSPACE/v21_corrective_parts/part_09" > /tmp/part_09a
           cat "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s00 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s01 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s02 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s03 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s04 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s05 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s06 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s07 "$GITHUB_WORKSPACE"/v21_corrective_parts/p09s08 > /tmp/part_09b
           cat /tmp/part_09a /tmp/part_09b > /tmp/part_09
           echo "c1273148f7879f99ae9a4bfa60d89e194b424ee937c8747baed483df4638f033  /tmp/part_09" | sha256sum -c -
           cat "$GITHUB_WORKSPACE/v21_corrective_parts/part_10a" "$GITHUB_WORKSPACE/v21_corrective_parts/part_10b" > /tmp/part_10
           echo "f080ea1bcffcc4dd047dc64a0a78612b28ca732c7a7fde74457f9369522a184e  /tmp/part_10" | sha256sum -c -
-
           : > /tmp/v21-corrective.b64
           cat "$GITHUB_WORKSPACE/v21_corrective_parts/part_00" >> /tmp/v21-corrective.b64
           cat "$GITHUB_WORKSPACE/v21_corrective_parts/part_00_tail" >> /tmp/v21-corrective.b64
@@ -82,8 +78,8 @@ jobs:
         run: |
           set -euo pipefail
           command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
-          chmod +x tools/generate_audio.sh
-          ./tools/generate_audio.sh
+          chmod +x "$GITHUB_WORKSPACE/v21_patch/generate_audio.sh"
+          "$GITHUB_WORKSPACE/v21_patch/generate_audio.sh" app/src/main/assets/audio
           test -f app/src/main/assets/audio/boss.ogg
           test -f app/src/main/assets/audio/hit.ogg
 
