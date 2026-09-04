@@ -1,0 +1,82 @@
+name: Split toolchains for Drive
+
+on:
+  push:
+    paths:
+      - '.github/workflows/split-toolchains-for-drive.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download original Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-toolchain-linux
+          path: staging/android
+          github-token: ${{ github.token }}
+          repository: javix142-gif/Prueba-de-Qwen
+          run-id: 33822826295
+
+      - name: Download original browser artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: browser-playwright-linux
+          path: staging/browser
+          github-token: ${{ github.token }}
+          repository: javix142-gif/Prueba-de-Qwen
+          run-id: 33822826295
+
+      - name: Verify originals and split
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p parts/android parts/browser manifest
+          ANDROID="$(find staging/android -type f -name 'android-toolchain-linux.zip' -print -quit)"
+          BROWSER="$(find staging/browser -type f -name 'browser-playwright-linux.zip' -print -quit)"
+          test -n "$ANDROID" && test -n "$BROWSER"
+          echo 'e12f0902787ff77f3accf57e35df4310dd1a4be8b08928b3eb525e115eb7ac64  android-toolchain-linux.zip' | sha256sum -c - --ignore-missing || true
+          test "$(sha256sum "$ANDROID" | awk '{print $1}')" = "e12f0902787ff77f3accf57e35df4310dd1a4be8b08928b3eb525e115eb7ac64"
+          test "$(sha256sum "$BROWSER" | awk '{print $1}')" = "750f8eacfd07f6eedcd57cd129c38db0c315964658e8078a57768f082f0d6d95"
+          split -b 99000000 -d -a 2 "$ANDROID" parts/android/android-toolchain-linux.zip.part-
+          split -b 99000000 -d -a 2 "$BROWSER" parts/browser/browser-playwright-linux.zip.part-
+          test "$(find parts/android -type f | wc -l)" -eq 9
+          test "$(find parts/browser -type f | wc -l)" -eq 4
+          (cd parts/android && sha256sum android-toolchain-linux.zip.part-* > ../../manifest/android-parts-SHA256SUMS.txt)
+          (cd parts/browser && sha256sum browser-playwright-linux.zip.part-* > ../../manifest/browser-parts-SHA256SUMS.txt)
+          cat > manifest/RECONSTRUIR.txt <<'EOF'
+          Linux/macOS:
+            cat android-toolchain-linux.zip.part-* > android-toolchain-linux.zip
+            cat browser-playwright-linux.zip.part-* > browser-playwright-linux.zip
+
+          SHA-256 esperados de los ZIP reconstruidos:
+            android-toolchain-linux.zip
+            e12f0902787ff77f3accf57e35df4310dd1a4be8b08928b3eb525e115eb7ac64
+
+            browser-playwright-linux.zip
+            750f8eacfd07f6eedcd57cd129c38db0c315964658e8078a57768f082f0d6d95
+          EOF
+
+      - { name: Upload android part 00, uses: actions/upload-artifact@v4, with: { name: drive-android-part-00, path: parts/android/android-toolchain-linux.zip.part-00, compression-level: 0 } }
+      - { name: Upload android part 01, uses: actions/upload-artifact@v4, with: { name: drive-android-part-01, path: parts/android/android-toolchain-linux.zip.part-01, compression-level: 0 } }
+      - { name: Upload android part 02, uses: actions/upload-artifact@v4, with: { name: drive-android-part-02, path: parts/android/android-toolchain-linux.zip.part-02, compression-level: 0 } }
+      - { name: Upload android part 03, uses: actions/upload-artifact@v4, with: { name: drive-android-part-03, path: parts/android/android-toolchain-linux.zip.part-03, compression-level: 0 } }
+      - { name: Upload android part 04, uses: actions/upload-artifact@v4, with: { name: drive-android-part-04, path: parts/android/android-toolchain-linux.zip.part-04, compression-level: 0 } }
+      - { name: Upload android part 05, uses: actions/upload-artifact@v4, with: { name: drive-android-part-05, path: parts/android/android-toolchain-linux.zip.part-05, compression-level: 0 } }
+      - { name: Upload android part 06, uses: actions/upload-artifact@v4, with: { name: drive-android-part-06, path: parts/android/android-toolchain-linux.zip.part-06, compression-level: 0 } }
+      - { name: Upload android part 07, uses: actions/upload-artifact@v4, with: { name: drive-android-part-07, path: parts/android/android-toolchain-linux.zip.part-07, compression-level: 0 } }
+      - { name: Upload android part 08, uses: actions/upload-artifact@v4, with: { name: drive-android-part-08, path: parts/android/android-toolchain-linux.zip.part-08, compression-level: 0 } }
+      - { name: Upload browser part 00, uses: actions/upload-artifact@v4, with: { name: drive-browser-part-00, path: parts/browser/browser-playwright-linux.zip.part-00, compression-level: 0 } }
+      - { name: Upload browser part 01, uses: actions/upload-artifact@v4, with: { name: drive-browser-part-01, path: parts/browser/browser-playwright-linux.zip.part-01, compression-level: 0 } }
+      - { name: Upload browser part 02, uses: actions/upload-artifact@v4, with: { name: drive-browser-part-02, path: parts/browser/browser-playwright-linux.zip.part-02, compression-level: 0 } }
+      - { name: Upload browser part 03, uses: actions/upload-artifact@v4, with: { name: drive-browser-part-03, path: parts/browser/browser-playwright-linux.zip.part-03, compression-level: 0 } }
+      - name: Upload reconstruction manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: drive-reconstruction-manifest
+          path: manifest/
+          compression-level: 9
