@@ -1,0 +1,363 @@
+name: Build Linux Offline Toolchain
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-toolchain-linux.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-toolchains:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      JDK_VERSION: '17.0.20.1_1'
+      GRADLE_VERSION: '9.3.1'
+      AGP_VERSION: '9.1.1'
+      ANDROID_API: '36'
+      BUILD_TOOLS: '36.0.0'
+      NODE_VERSION: '24.20.0'
+      PLAYWRIGHT_VERSION: '1.62.1'
+      ANDROID_CLI_ZIP: 'commandlinetools-linux-15859902_latest.zip'
+      ANDROID_CLI_SHA256: '4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583'
+      NODE_SHA256: '2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_ROOT=$RUNNER_TEMP/android-package/toolchain-linux-x64" >> "$GITHUB_ENV"
+          echo "BROWSER_ROOT=$RUNNER_TEMP/browser-package/toolchain-linux-x64" >> "$GITHUB_ENV"
+          echo "WORK_ROOT=$RUNNER_TEMP/toolchain-work" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/android-package/toolchain-linux-x64" \
+                   "$RUNNER_TEMP/browser-package/toolchain-linux-x64" \
+                   "$RUNNER_TEMP/toolchain-work"
+
+      - name: Download and verify JDK 17 x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$WORK_ROOT"
+          JDK_URL='https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz'
+          JDK_SHA_URL='https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz.sha256.txt'
+          curl -fL --retry 4 -o jdk17.tar.gz "$JDK_URL"
+          curl -fL --retry 4 -o jdk17.sha256 "$JDK_SHA_URL"
+          EXPECTED="$(awk '{print $1}' jdk17.sha256)"
+          ACTUAL="$(sha256sum jdk17.tar.gz | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          mkdir -p "$ANDROID_ROOT/jdk-17"
+          tar -xzf jdk17.tar.gz --strip-components=1 -C "$ANDROID_ROOT/jdk-17"
+          "$ANDROID_ROOT/jdk-17/bin/java" -version
+          "$ANDROID_ROOT/jdk-17/bin/javac" -version
+          test -x "$ANDROID_ROOT/jdk-17/bin/jarsigner"
+          test -x "$ANDROID_ROOT/jdk-17/bin/keytool"
+          echo "JAVA_HOME=$ANDROID_ROOT/jdk-17" >> "$GITHUB_ENV"
+          echo "$ANDROID_ROOT/jdk-17/bin" >> "$GITHUB_PATH"
+
+      - name: Download and verify Gradle 9.3.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$WORK_ROOT"
+          curl -fL --retry 4 -o gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+          curl -fL --retry 4 -o gradle.sha256 "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip.sha256"
+          echo "$(cat gradle.sha256)  gradle.zip" | sha256sum -c -
+          unzip -q gradle.zip -d "$WORK_ROOT/gradle-unpack"
+          cp -a "$WORK_ROOT/gradle-unpack/gradle-${GRADLE_VERSION}" "$ANDROID_ROOT/gradle-${GRADLE_VERSION}"
+          "$ANDROID_ROOT/gradle-${GRADLE_VERSION}/bin/gradle" --version
+
+      - name: Create Gradle Wrapper 9.3.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          WRAP="$WORK_ROOT/wrapper-project"
+          mkdir -p "$WRAP"
+          printf "rootProject.name='wrapper-toolchain'\n" > "$WRAP/settings.gradle"
+          : > "$WRAP/build.gradle"
+          "$ANDROID_ROOT/gradle-${GRADLE_VERSION}/bin/gradle" -p "$WRAP" wrapper --gradle-version "$GRADLE_VERSION" --distribution-type bin --no-daemon
+          mkdir -p "$ANDROID_ROOT/gradle-wrapper/gradle/wrapper"
+          cp "$WRAP/gradlew" "$WRAP/gradlew.bat" "$ANDROID_ROOT/gradle-wrapper/"
+          cp "$WRAP/gradle/wrapper/gradle-wrapper.jar" "$WRAP/gradle/wrapper/gradle-wrapper.properties" "$ANDROID_ROOT/gradle-wrapper/gradle/wrapper/"
+          chmod +x "$ANDROID_ROOT/gradle-wrapper/gradlew"
+          test -f "$ANDROID_ROOT/gradle-wrapper/gradle/wrapper/gradle-wrapper.jar"
+
+      - name: Install clean Android SDK 36 and Build Tools 36.0.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$WORK_ROOT"
+          curl -fL --retry 4 -o "$ANDROID_CLI_ZIP" "https://dl.google.com/android/repository/$ANDROID_CLI_ZIP"
+          echo "$ANDROID_CLI_SHA256  $ANDROID_CLI_ZIP" | sha256sum -c -
+          mkdir -p "$WORK_ROOT/android-clean/cmdline-tools/latest"
+          unzip -q "$ANDROID_CLI_ZIP" -d "$WORK_ROOT/android-cli-unpack"
+          cp -a "$WORK_ROOT/android-cli-unpack/cmdline-tools/." "$WORK_ROOT/android-clean/cmdline-tools/latest/"
+          export ANDROID_SDK_ROOT="$WORK_ROOT/android-clean"
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --channel=0 \
+            "platforms;android-${ANDROID_API}" \
+            "build-tools;${BUILD_TOOLS}" \
+            "platform-tools"
+          mkdir -p "$ANDROID_ROOT/android-sdk/platforms" "$ANDROID_ROOT/android-sdk/build-tools"
+          cp -a "$ANDROID_SDK_ROOT/platforms/android-${ANDROID_API}" "$ANDROID_ROOT/android-sdk/platforms/"
+          cp -a "$ANDROID_SDK_ROOT/build-tools/${BUILD_TOOLS}" "$ANDROID_ROOT/android-sdk/build-tools/"
+          cp -a "$ANDROID_SDK_ROOT/platform-tools" "$ANDROID_ROOT/android-sdk/"
+          cp -a "$ANDROID_SDK_ROOT/licenses" "$ANDROID_ROOT/android-sdk/"
+          test -x "$ANDROID_ROOT/android-sdk/build-tools/${BUILD_TOOLS}/aapt"
+          test -x "$ANDROID_ROOT/android-sdk/build-tools/${BUILD_TOOLS}/aapt2"
+          test -x "$ANDROID_ROOT/android-sdk/build-tools/${BUILD_TOOLS}/apksigner"
+          test -x "$ANDROID_ROOT/android-sdk/build-tools/${BUILD_TOOLS}/zipalign"
+          test -f "$ANDROID_ROOT/android-sdk/build-tools/${BUILD_TOOLS}/d8"
+          test -x "$ANDROID_ROOT/android-sdk/platform-tools/adb"
+          echo "ANDROID_SDK_ROOT=$ANDROID_ROOT/android-sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_ROOT/android-sdk" >> "$GITHUB_ENV"
+
+      - name: Populate Gradle offline cache with AGP 9.1.1 and Maven dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAMPLE="$WORK_ROOT/offline-sample"
+          mkdir -p "$SAMPLE/app/src/main/java/com/example/offline"
+          cat > "$SAMPLE/settings.gradle" <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'OfflineAgpProbe'
+          include ':app'
+          EOF
+          cat > "$SAMPLE/build.gradle" <<EOF
+          plugins {
+              id 'com.android.application' version '${AGP_VERSION}' apply false
+          }
+          EOF
+          cat > "$SAMPLE/app/build.gradle" <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace = 'com.example.offline'
+              compileSdk = 36
+              defaultConfig {
+                  applicationId = 'com.example.offline'
+                  minSdk = 23
+                  targetSdk = 36
+                  versionCode = 1
+                  versionName = '1.0'
+              }
+          }
+          EOF
+          cat > "$SAMPLE/app/src/main/AndroidManifest.xml" <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application android:label="OfflineAgpProbe">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          cat > "$SAMPLE/app/src/main/java/com/example/offline/MainActivity.java" <<'EOF'
+          package com.example.offline;
+          import android.app.Activity;
+          import android.os.Bundle;
+          public class MainActivity extends Activity {
+              @Override public void onCreate(Bundle state) { super.onCreate(state); }
+          }
+          EOF
+          cp "$ANDROID_ROOT/gradle-wrapper/gradlew" "$ANDROID_ROOT/gradle-wrapper/gradlew.bat" "$SAMPLE/"
+          mkdir -p "$SAMPLE/gradle/wrapper"
+          cp "$ANDROID_ROOT/gradle-wrapper/gradle/wrapper/"* "$SAMPLE/gradle/wrapper/"
+          chmod +x "$SAMPLE/gradlew"
+          export GRADLE_USER_HOME="$ANDROID_ROOT/gradle-cache"
+          export ANDROID_SDK_ROOT="$ANDROID_ROOT/android-sdk"
+          export ANDROID_HOME="$ANDROID_ROOT/android-sdk"
+          cd "$SAMPLE"
+          ./gradlew --version
+          ./gradlew --no-daemon --stacktrace assembleDebug
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          rm -rf "$GRADLE_USER_HOME/daemon" "$GRADLE_USER_HOME/notifications" "$GRADLE_USER_HOME/.tmp" || true
+
+      - name: Verify Gradle cache is portable and works offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAMPLE="$WORK_ROOT/offline-sample"
+          TEST_CACHE="$WORK_ROOT/offline-cache-test"
+          cp -a "$ANDROID_ROOT/gradle-cache" "$TEST_CACHE"
+          rm -rf "$SAMPLE/.gradle" "$SAMPLE/app/build"
+          export GRADLE_USER_HOME="$TEST_CACHE"
+          export ANDROID_SDK_ROOT="$ANDROID_ROOT/android-sdk"
+          export ANDROID_HOME="$ANDROID_ROOT/android-sdk"
+          cd "$SAMPLE"
+          ./gradlew --offline --no-daemon clean assembleDebug
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          rm -rf "$TEST_CACHE"
+
+      - name: Download and verify Node.js 24.20.0 Linux x64
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$WORK_ROOT"
+          NODE_ARCHIVE="node-v${NODE_VERSION}-linux-x64.tar.xz"
+          curl -fL --retry 4 -o "$NODE_ARCHIVE" "https://nodejs.org/dist/v${NODE_VERSION}/$NODE_ARCHIVE"
+          echo "$NODE_SHA256  $NODE_ARCHIVE" | sha256sum -c -
+          mkdir -p "$BROWSER_ROOT/node"
+          tar -xJf "$NODE_ARCHIVE" --strip-components=1 -C "$BROWSER_ROOT/node"
+          "$BROWSER_ROOT/node/bin/node" --version
+          "$BROWSER_ROOT/node/bin/npm" --version
+
+      - name: Install Playwright 1.62.1 and Chromium for Linux x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$BROWSER_ROOT/node/bin:$PATH"
+          PW="$WORK_ROOT/playwright-project"
+          mkdir -p "$PW" "$BROWSER_ROOT/playwright/browsers"
+          cd "$PW"
+          npm init -y >/dev/null
+          npm install --save-exact "playwright@${PLAYWRIGHT_VERSION}"
+          PLAYWRIGHT_BROWSERS_PATH="$BROWSER_ROOT/playwright/browsers" npx playwright install chromium
+          cp -a node_modules "$BROWSER_ROOT/playwright/node_modules"
+          cp package.json package-lock.json "$BROWSER_ROOT/playwright/"
+          node -e "const p=require('./node_modules/playwright/package.json'); if(p.version!=='${PLAYWRIGHT_VERSION}') process.exit(1); console.log('Playwright', p.version)"
+          PLAYWRIGHT_BROWSERS_PATH="$BROWSER_ROOT/playwright/browsers" node - <<'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch({headless:true});
+            const page = await browser.newPage();
+            await page.setContent('<title>toolchain-ok</title><h1>OK</h1>');
+            const title = await page.title();
+            console.log('headless smoke:', title);
+            await browser.close();
+            if (title !== 'toolchain-ok') process.exit(1);
+          })();
+          EOF
+
+      - name: Add usage notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$ANDROID_ROOT/README_TOOLCHAIN.md" <<EOF
+          # Linux x86_64 Android offline toolchain
+
+          Components:
+          - Eclipse Temurin JDK 17.0.20.1+1
+          - Gradle ${GRADLE_VERSION}
+          - Gradle Wrapper ${GRADLE_VERSION}
+          - Android SDK platform android-${ANDROID_API}
+          - Android Build Tools ${BUILD_TOOLS}
+          - Android Platform Tools
+          - Android SDK licenses generated by sdkmanager
+          - Gradle offline cache populated by a successful AGP ${AGP_VERSION} assembleDebug
+
+          Suggested environment:
+          export TOOLCHAIN_ROOT="\$PWD/toolchain-linux-x64"
+          export JAVA_HOME="\$TOOLCHAIN_ROOT/jdk-17"
+          export ANDROID_SDK_ROOT="\$TOOLCHAIN_ROOT/android-sdk"
+          export ANDROID_HOME="\$ANDROID_SDK_ROOT"
+          export GRADLE_USER_HOME="\$TOOLCHAIN_ROOT/gradle-cache"
+          export PATH="\$JAVA_HOME/bin:\$ANDROID_SDK_ROOT/platform-tools:\$TOOLCHAIN_ROOT/gradle-${GRADLE_VERSION}/bin:\$PATH"
+
+          Offline validation used during build:
+          ./gradlew --offline --no-daemon clean assembleDebug
+          EOF
+          cat > "$BROWSER_ROOT/README_BROWSER.md" <<EOF
+          # Linux x86_64 browser + Playwright
+
+          Components:
+          - Node.js ${NODE_VERSION} LTS Linux x64
+          - Playwright ${PLAYWRIGHT_VERSION} Node package
+          - Playwright-managed Chromium / Chrome for Testing browser files
+
+          Suggested environment:
+          export TOOLCHAIN_ROOT="\$PWD/toolchain-linux-x64"
+          export PATH="\$TOOLCHAIN_ROOT/node/bin:\$PATH"
+          export NODE_PATH="\$TOOLCHAIN_ROOT/playwright/node_modules"
+          export PLAYWRIGHT_BROWSERS_PATH="\$TOOLCHAIN_ROOT/playwright/browsers"
+          EOF
+
+      - name: Security and content validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$ANDROID_ROOT/jdk-17/bin/java"
+          test -x "$ANDROID_ROOT/jdk-17/bin/javac"
+          test -x "$ANDROID_ROOT/jdk-17/bin/jarsigner"
+          test -x "$ANDROID_ROOT/jdk-17/bin/keytool"
+          test -x "$ANDROID_ROOT/gradle-${GRADLE_VERSION}/bin/gradle"
+          test -f "$ANDROID_ROOT/gradle-wrapper/gradlew"
+          test -f "$ANDROID_ROOT/gradle-wrapper/gradlew.bat"
+          test -f "$ANDROID_ROOT/gradle-wrapper/gradle/wrapper/gradle-wrapper.jar"
+          test -f "$ANDROID_ROOT/gradle-wrapper/gradle/wrapper/gradle-wrapper.properties"
+          test -d "$ANDROID_ROOT/android-sdk/platforms/android-${ANDROID_API}"
+          test -d "$ANDROID_ROOT/android-sdk/build-tools/${BUILD_TOOLS}"
+          test -d "$ANDROID_ROOT/android-sdk/platform-tools"
+          test -d "$ANDROID_ROOT/android-sdk/licenses"
+          test -d "$ANDROID_ROOT/gradle-cache/caches/modules-2"
+          test -x "$BROWSER_ROOT/node/bin/node"
+          test -d "$BROWSER_ROOT/playwright/node_modules/playwright"
+          test -d "$BROWSER_ROOT/playwright/browsers"
+          if find "$ANDROID_ROOT" "$BROWSER_ROOT" -type f -iname '*.exe' -print -quit | grep -q .; then
+            echo 'ERROR: Windows .exe found'; exit 1
+          fi
+          if find "$ANDROID_ROOT" "$BROWSER_ROOT" -type f \( -iname '*.jks' -o -iname '*.keystore' -o -name '.env' -o -iname '*private*key*' \) -print -quit | grep -q .; then
+            echo 'ERROR: possible secret/private key file found'; exit 1
+          fi
+
+      - name: Generate SHA256 manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for ROOT in "$ANDROID_ROOT" "$BROWSER_ROOT"; do
+            cd "$ROOT"
+            find . -type f ! -name SHA256SUMS.txt -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          done
+
+      - name: Create ZIP files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/android-package"
+          zip -q -r -y -6 "$RUNNER_TEMP/android-toolchain-linux.zip" toolchain-linux-x64
+          cd "$RUNNER_TEMP/browser-package"
+          zip -q -r -y -6 "$RUNNER_TEMP/browser-playwright-linux.zip" toolchain-linux-x64
+          sha256sum "$RUNNER_TEMP/android-toolchain-linux.zip" "$RUNNER_TEMP/browser-playwright-linux.zip"
+          ls -lh "$RUNNER_TEMP/android-toolchain-linux.zip" "$RUNNER_TEMP/browser-playwright-linux.zip"
+
+      - name: Upload Android toolchain ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-toolchain-linux
+          path: ${{ runner.temp }}/android-toolchain-linux.zip
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload Browser Playwright ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-playwright-linux
+          path: ${{ runner.temp }}/browser-playwright-linux.zip
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
